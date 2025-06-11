@@ -1,0 +1,24 @@
+[toolchain]
+anchor_version = "0.29.0"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+absolute_vault = "838Ra5u255By2HkV7mtzP6KFgXnjrQiQDB3Gmdpbrf2d"
+smart_dial = "11111111111111111111111111111111"
+
+[programs.devnet]
+absolute_vault = "838Ra5u255By2HkV7mtzP6KFgXnjrQiQDB3Gmdpbrf2d"
+smart_dial = "11111111111111111111111111111111"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "nx run anchor:test --skip-lint"
