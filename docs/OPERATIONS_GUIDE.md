@@ -10,8 +10,31 @@ This guide provides operational procedures for both test and production environm
 | Wallets | Test wallets with airdropped SOL | Hardware wallets / Multisig |
 | API Keys | Test/Development keys | Production keys with higher limits |
 | Monitoring | Basic logging | Full monitoring stack |
-| Intervals | Fast (minutes) | Standard (30min/5min/1hr) |
+| Intervals | Fast (minutes) | Standard (5min distribution) |
 | Security | Relaxed | Strict |
+
+## System Architecture - Three Distribution Scenarios
+
+### Scenario 1: Normal Operation (SOL ≥ 0.05, Reward Token ≠ SOL)
+- **5% tax** → All swapped to reward tokens
+- **Distribution**: 80% to holders (4%), 20% to owner (1%)
+
+### Scenario 2: Low SOL Balance (SOL < 0.05, Reward Token ≠ SOL)
+- **5% tax** → Split: 4% to rewards, 1% to SOL
+- **Distribution**: 
+  - All reward tokens to eligible holders
+  - SOL to owner (keeping keeper bot at 0.1 SOL)
+
+### Scenario 3: Reward Token is SOL
+- **5% tax** → All swapped to SOL
+- **Distribution**: 
+  - 80% SOL to eligible holders
+  - 20% SOL handled like Scenario 2 (excess above 0.1 SOL to owner)
+
+### Dynamic Holder Eligibility
+- Based on $100 USD worth of MIKO
+- Calculated before each distribution cycle
+- Uses real-time price from Birdeye API
 
 ## Keeper Bot Operations
 
@@ -19,11 +42,32 @@ This guide provides operational procedures for both test and production environm
 
 #### Starting the Bot
 ```bash
-# Development mode with hot reload
-npm run dev
+# Development mode with test features
+TEST_MODE=true npm run dev
 
 # Or with Docker
 docker-compose -f docker-compose.test.yml up
+```
+
+#### Environment Variables (Test)
+```bash
+# .env.test
+NODE_ENV=development
+TEST_MODE=true
+RPC_URL=https://solana-devnet.g.alchemy.com/v2/YOUR_KEY
+KEEPER_BOT_KEY=<base64_encoded_test_key>
+
+# Program IDs (Devnet)
+ABSOLUTE_VAULT_PROGRAM_ID=EMstwrRUs4dWeec9azA9RJB5Qu93A1F5Q34JyN3w4QFC
+SMART_DIAL_PROGRAM_ID=67sZQtNqoRs5RjncYXMaeRAGrgUK49GSaLJCvHA2SXrj
+MIKO_TOKEN_MINT=BiQUbqckzG7C4hhv6vCYBeEx7KDEgaXqK1M3x9X67KKh
+
+# Test values for APIs
+BIRDEYE_API_KEY=test_key
+TWITTER_BEARER_TOKEN=test_token
+
+# Emergency fund (can be any wallet for testing)
+EMERGENCY_FUND_ADDRESS=FwN6tCpJkHhuYxBKwcrGU6PDW4aRNuukQBi58ay4iYGM
 ```
 
 #### Manual Testing Commands
@@ -31,26 +75,23 @@ docker-compose -f docker-compose.test.yml up
 # Trigger reward check
 curl -X POST http://localhost:3000/test/trigger-reward-check
 
-# Trigger distribution
-curl -X POST http://localhost:3000/test/trigger-distribution
+# Trigger distribution with price override
+curl -X POST http://localhost:3000/test/trigger-distribution \
+  -H "Content-Type: application/json" \
+  -d '{"mikoPrice": 0.01}'
 
-# Update holder registry
-curl -X POST http://localhost:3000/test/update-holders
+# Update holder registry with custom threshold
+curl -X POST http://localhost:3000/test/update-holders \
+  -H "Content-Type: application/json" \
+  -d '{"minTokens": 10000}'
 
-# Check state
-curl http://localhost:3000/test/state
-```
+# Check bot SOL balance
+curl http://localhost:3000/test/sol-balance
 
-#### Test Environment Monitoring
-```bash
-# View logs
-tail -f logs/keeper-bot-test.log
-
-# Check metrics
-curl http://localhost:3000/metrics | grep test_
-
-# Monitor Solana programs
-solana logs <PROGRAM_ID> -u devnet
+# Simulate low SOL scenario
+curl -X POST http://localhost:3000/test/drain-sol \
+  -H "Content-Type: application/json" \
+  -d '{"targetBalance": 0.04}'
 ```
 
 ### Production Environment Operations
@@ -73,103 +114,130 @@ docker run -d \
 # Health checks
 curl https://keeper.miko.finance/health
 
-# Metrics endpoint (internal only)
-curl http://keeper-internal:9090/metrics
+# Check SOL balance
+curl https://keeper.miko.finance/stats | jq .solBalance
 
-# Grafana dashboards
-https://monitoring.miko.finance/d/miko-keeper
+# Monitor reward cycles
+curl https://keeper.miko.finance/rewards/recent
 ```
 
 #### Production Alerts
-- KeeperBotDown: Bot hasn't reported in 5 minutes
-- LowSOLBalance: SOL balance < 0.5
-- HighErrorRate: Error rate > 10%
-- MissedRewardCycle: No distribution in 2 hours
+- **KeeperBotDown**: Bot hasn't reported in 5 minutes
+- **LowSOLBalance**: SOL balance < 0.02 (critical)
+- **HighErrorRate**: Error rate > 10%
+- **MissedRewardCycle**: No distribution in 15 minutes
+- **SwapFailures**: Multiple consecutive swap failures
 
-## Token Management
-
-### Test Token Operations
-
-#### Create Test Holders
-```bash
-# Script to create multiple test holders
-for i in {1..10}; do
-  solana-keygen new -o holder$i-test.json --no-bip39-passphrase
-  solana airdrop 1 holder$i-test.json -u devnet
-  
-  # Create token account
-  spl-token create-account $MIKO_TOKEN_MINT \
-    --owner holder$i-test.json \
-    --url devnet
-done
-```
-
-#### Distribute Test Tokens
-```bash
-# Transfer tokens to test holders
-for i in {1..10}; do
-  spl-token transfer $MIKO_TOKEN_MINT 100000 \
-    $(solana-keygen pubkey holder$i-test.json) \
-    --url devnet
-done
-```
-
-### Production Token Operations
-
-#### Monitor Token Metrics
-```bash
-# Total supply
-spl-token supply $MIKO_TOKEN_MINT
-
-# Largest holders
-spl-token accounts $MIKO_TOKEN_MINT --limit 20
-
-# Tax collected (check withheld amount)
-spl-token display $MIKO_TOKEN_MINT --verbose
-```
-
-#### Emergency Procedures
-```bash
-# Pause reward distribution (keeper bot only)
-kubectl scale deployment miko-keeper-bot --replicas=0
-
-# Resume operations
-kubectl scale deployment miko-keeper-bot --replicas=1
-```
-
-## Reward Distribution
+## Dynamic Holder Eligibility
 
 ### Test Environment
 
-#### Simulate Reward Cycle
+#### Simulate Different Price Scenarios
 ```bash
-# 1. Update reward token
-curl -X POST http://localhost:3000/test/set-reward-token \
+# Test with $0.01 MIKO price (10,000 MIKO threshold)
+curl -X POST http://localhost:3000/test/set-miko-price \
   -H "Content-Type: application/json" \
-  -d '{"token": "BONK", "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}'
+  -d '{"price": 0.01}'
 
-# 2. Add test funds to treasury
-spl-token transfer $MIKO_TOKEN_MINT 1000000 $TREASURY_WALLET
+# Test with $0.10 MIKO price (1,000 MIKO threshold)
+curl -X POST http://localhost:3000/test/set-miko-price \
+  -H "Content-Type: application/json" \
+  -d '{"price": 0.10}'
 
-# 3. Trigger distribution
-curl -X POST http://localhost:3000/test/trigger-distribution
+# Test with $0.001 MIKO price (100,000 MIKO threshold)
+curl -X POST http://localhost:3000/test/set-miko-price \
+  -H "Content-Type: application/json" \
+  -d '{"price": 0.001}'
+```
 
-# 4. Check results
-curl http://localhost:3000/test/last-distribution
+#### Create Test Holders with Various Balances
+```bash
+# Create holders with different balance levels
+node scripts/create-test-holders.js \
+  --count 20 \
+  --min-balance 500 \
+  --max-balance 500000
 ```
 
 ### Production Environment
 
-#### Monitor Reward Cycles
+#### Monitor Price and Thresholds
 ```bash
-# View recent distributions
-curl https://api.miko.finance/rewards/recent
+# Current MIKO price
+curl https://api.miko.finance/price
 
-# Check pending rewards
-curl https://api.miko.finance/rewards/pending
+# Current eligibility threshold
+curl https://api.miko.finance/holders/threshold
 
-# Verify holder registry
-curl https://api.miko.finance/holders/count
+# Eligible holder count
+curl https://api.miko.finance/holders/eligible-count
+```
+
+## Reward Distribution
+
+### Test Environment Reward Cycle
+
+```bash
+# 1. Set test reward token
+curl -X POST http://localhost:3000/test/set-reward-token \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "BONK", "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}'
+
+# 2. Fund treasury with test reward tokens
+spl-token create-account $REWARD_TOKEN --owner $TREASURY
+spl-token mint $REWARD_TOKEN 1000000 $TREASURY_REWARD_ACCOUNT
+
+# 3. Add MIKO to treasury for swapping
+spl-token transfer $MIKO_TOKEN_MINT 100000 $TREASURY_WALLET
+
+# 4. Execute reward cycle
+curl -X POST http://localhost:3000/test/execute-reward-cycle
+
+# 5. Check distribution results
+curl http://localhost:3000/test/last-distribution
+```
+
+### Production Environment Monitoring
+
+```bash
+# Recent distributions
+curl https://api.miko.finance/rewards/history?limit=10
+
+# Pending tax amount
+curl https://api.miko.finance/tax/pending
+
+# Next cycle timing
+curl https://api.miko.finance/rewards/next-cycle
+```
+
+## SOL Balance Management
+
+### Test Environment
+
+#### Simulate SOL Management Scenarios
+```bash
+# Test low SOL scenario
+curl -X POST http://localhost:3000/test/simulate-low-sol
+
+# Test SOL refuel process
+curl -X POST http://localhost:3000/test/simulate-sol-refuel
+
+# Check emergency fund transfers
+curl http://localhost:3000/test/emergency-fund-transfers
+```
+
+### Production Environment
+
+#### Monitor SOL Balance
+```bash
+# Current balance and thresholds
+curl https://api.miko.finance/keeper/sol-status
+
+# SOL swap history
+curl https://api.miko.finance/keeper/sol-swaps
+
+# Emergency fund balance
+solana balance $EMERGENCY_FUND_ADDRESS
 ```
 
 ## Troubleshooting
@@ -178,82 +246,83 @@ curl https://api.miko.finance/holders/count
 
 | Issue | Solution |
 |-------|----------|
-| Insufficient SOL | `solana airdrop 10 -u devnet` |
-| Program not initialized | Re-run initialization script |
-| API rate limits | Use mock mode: `TEST_MODE=true` |
-| Transaction failures | Increase compute units in test config |
+| Swap simulation not working | Ensure `TEST_MODE=true` is set |
+| Price mock not applying | Check log for "DEVNET MODE" messages |
+| Holder eligibility wrong | Verify mock price calculation |
+| SOL management not triggering | Manually set low balance with test endpoint |
 
 ### Production Environment Issues
 
 | Issue | Solution |
 |-------|----------|
-| Keeper bot not updating | Check logs, verify API keys |
-| High gas costs | Optimize batch sizes, check priority fees |
-| RPC errors | Switch to backup RPC endpoint |
-| Distribution failures | Check treasury balance, holder registry |
-
-## Maintenance Procedures
-
-### Test Environment
-- Weekly: Clean up test accounts
-- Monthly: Reset test data
-- As needed: Update dependencies
-
-### Production Environment
-- Daily: Review metrics and logs
-- Weekly: Backup state data
-- Monthly: Security audit
-- Quarterly: Key rotation
-
-## API Endpoints Reference
-
-### Test Environment Endpoints
-```
-GET  /health              - Health status
-GET  /metrics             - Prometheus metrics
-POST /test/trigger-reward-check
-POST /test/trigger-distribution  
-POST /test/update-holders
-POST /test/set-reward-token
-GET  /test/state
-GET  /test/last-distribution
-```
-
-### Production Environment Endpoints
-```
-GET  /health              - Health status
-GET  /metrics             - Prometheus metrics (internal)
-GET  /live                - Kubernetes liveness
-GET  /ready               - Kubernetes readiness
-```
+| Keeper bot not swapping to SOL | Check balance, ensure < 0.05 SOL |
+| Wrong holder threshold | Verify Birdeye API is returning price |
+| Rewards not distributing | Check treasury balance, holder registry |
+| High swap failures | Check Jupiter API status, increase slippage |
 
 ## Emergency Procedures
 
 ### Test Environment
 1. Stop all services: `docker-compose down`
 2. Clear test data: `rm -rf test-data/`
-3. Restart fresh: `./scripts/reset-test-env.sh`
+3. Reset holder registry: `node scripts/reset-holders.js`
+4. Restart: `TEST_MODE=true npm run dev`
 
 ### Production Environment
-1. **DO NOT PANIC**
-2. Assess the situation
-3. Stop keeper bot if needed
-4. Contact technical lead
-5. Follow incident response plan
-6. Document everything
+
+#### Critical: Keeper Bot SOL Depleted
+1. **Immediate**: Transfer SOL manually to keeper bot
+2. **Investigate**: Check swap logs for failures
+3. **Adjust**: Increase SOL threshold if needed
+4. **Monitor**: Watch next cycles closely
+
+#### Critical: Wrong Reward Token
+1. **Stop**: Scale down keeper bot immediately
+2. **Update**: Manually update Smart Dial if needed
+3. **Verify**: Check AI agent tweets for correct token
+4. **Resume**: Scale up keeper bot
+
+#### Critical: Mass Distribution Failure
+1. **Pause**: Stop keeper bot
+2. **Diagnose**: Check program logs
+3. **Fix**: Address root cause
+4. **Test**: Run single distribution test
+5. **Resume**: Restart normal operations
 
 ## Best Practices
 
 ### For Test Environment
-- Use descriptive names for test wallets
-- Document test scenarios
-- Clean up after testing
-- Don't use production keys
+- Always use TEST_MODE=true
+- Create diverse holder scenarios
+- Test edge cases (exactly $100, $99.99, etc.)
+- Simulate network issues
+- Document test results
 
 ### For Production Environment
-- Always verify transactions before signing
-- Monitor all operations
-- Keep detailed logs
-- Follow security protocols
-- Never share private keys
-- Use multisig for critical operations
+- Monitor SOL balance continuously
+- Set up alerts for all thresholds
+- Keep emergency fund topped up
+- Review holder eligibility changes
+- Audit reward distributions daily
+- Never manually intervene unless critical
+
+## Maintenance Schedule
+
+### Daily
+- Check keeper bot health
+- Review SOL balance and swaps
+- Verify reward distributions
+- Monitor holder count changes
+
+### Weekly
+- Analyze distribution patterns
+- Review API usage and limits
+- Check emergency fund balance
+- Audit security logs
+
+### Monthly
+- Full system health check
+- Performance optimization review
+- Cost analysis (SOL usage)
+- Security audit
+- Key rotation (if applicable)

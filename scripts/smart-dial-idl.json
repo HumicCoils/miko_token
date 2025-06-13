@@ -1,0 +1,140 @@
+{
+  "version": "0.1.0",
+  "name": "smart_dial",
+  "instructions": [
+    {
+      "name": "initialize",
+      "accounts": [
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "keeperBotPubkey",
+          "type": "publicKey"
+        },
+        {
+          "name": "treasuryWallet",
+          "type": "publicKey"
+        },
+        {
+          "name": "ownerWallet",
+          "type": "publicKey"
+        },
+        {
+          "name": "aiAgentTwitterId",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "updateRewardToken",
+      "accounts": [
+        {
+          "name": "keeperBot",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "newRewardTokenMint",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "updateWallets",
+      "accounts": [
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "newTreasuryWallet",
+          "type": {
+            "option": "publicKey"
+          }
+        },
+        {
+          "name": "newOwnerWallet",
+          "type": {
+            "option": "publicKey"
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "SmartDialConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "currentRewardTokenMint",
+            "type": "publicKey"
+          },
+          {
+            "name": "keeperBotPubkey",
+            "type": "publicKey"
+          },
+          {
+            "name": "treasuryWallet",
+            "type": "publicKey"
+          },
+          {
+            "name": "ownerWallet",
+            "type": "publicKey"
+          },
+          {
+            "name": "aiAgentTwitterId",
+            "type": "string"
+          },
+          {
+            "name": "lastUpdated",
+            "type": "i64"
+          },
+          {
+            "name": "admin",
+            "type": "publicKey"
+          },
+          {
+            "name": "initialized",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}

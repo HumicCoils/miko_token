@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    token::{Token, TokenAccount, Mint},
+    token::{TokenAccount, Mint},
     associated_token::AssociatedToken,
 };
 use crate::{constants::*, errors::VaultError, state::TaxConfig};

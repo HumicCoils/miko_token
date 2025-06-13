@@ -7,12 +7,14 @@ import {
     sendAndConfirmTransaction,
     ComputeBudgetProgram,
     TransactionMessage,
-    TransactionInstruction
+    TransactionInstruction,
+    SystemProgram
 } from '@solana/web3.js';
 import { Program, AnchorProvider, Wallet } from '@coral-xyz/anchor';
 import { 
     getAssociatedTokenAddress,
     createAssociatedTokenAccountInstruction,
+    createTransferCheckedInstruction,
     TOKEN_2022_PROGRAM_ID
 } from '@solana/spl-token';
 import * as bs58 from 'bs58';
@@ -64,7 +66,7 @@ export class SolanaClient {
     async getBalance(address?: PublicKey): Promise<number> {
         const pubkey = address || this.wallet.publicKey;
         const balance = await this.connection.getBalance(pubkey);
-        return balance / 1e9; // Convert lamports to SOL
+        return balance; // Return in lamports
     }
     
     async getTokenBalance(mint: PublicKey, owner?: PublicKey): Promise<number> {
@@ -231,5 +233,55 @@ export class SolanaClient {
         const slot = await this.getSlot();
         const blockTime = await this.connection.getBlockTime(slot);
         return { slot, blockTime };
+    }
+    
+    async transfer(
+        recipient: PublicKey,
+        lamports: number
+    ): Promise<string> {
+        const transaction = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: this.wallet.publicKey,
+                toPubkey: recipient,
+                lamports,
+            })
+        );
+        
+        return await this.sendTransaction(transaction);
+    }
+    
+    async getTokenAccount(
+        mint: PublicKey,
+        owner: PublicKey
+    ): Promise<PublicKey> {
+        return await getAssociatedTokenAddress(
+            mint,
+            owner,
+            false,
+            TOKEN_2022_PROGRAM_ID
+        );
+    }
+    
+    async transferToken(
+        mint: PublicKey,
+        from: PublicKey,
+        to: PublicKey,
+        authority: PublicKey,
+        amount: number
+    ): Promise<string> {
+        const transaction = new Transaction().add(
+            createTransferCheckedInstruction(
+                from,
+                mint,
+                to,
+                authority,
+                amount,
+                9, // Assuming 9 decimals for all tokens
+                [],
+                TOKEN_2022_PROGRAM_ID
+            )
+        );
+        
+        return await this.sendTransaction(transaction);
     }
 }

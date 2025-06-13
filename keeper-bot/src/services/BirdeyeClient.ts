@@ -205,4 +205,23 @@ export class BirdeyeClient {
             return false;
         }
     }
+    
+    async getMikoPrice(): Promise<number> {
+        try {
+            const details = await this.getTokenDetails(config.MIKO_TOKEN_MINT.toString());
+            const price = parseFloat(details.price) || 0;
+            
+            logger.info({ 
+                price, 
+                marketCap: details.mc,
+                volume24h: details.v24hUSD 
+            }, 'Retrieved MIKO token price');
+            
+            return price;
+        } catch (error) {
+            logger.error({ error }, 'Failed to get MIKO token price');
+            // Return a default price if unable to fetch
+            return 0.01; // Default to $0.01
+        }
+    }
 }

@@ -54,7 +54,7 @@ pub fn handler(
     tax_config.bump = ctx.bumps.tax_config;
     
     msg!("Absolute Vault initialized with tax rate: {}%", TAX_RATE);
-    msg!("Owner share: {}%, Holder share: {}%", OWNER_SHARE, HOLDER_SHARE);
+    msg!("All tax will be sent to treasury for swapping and distribution");
     
     Ok(())
 }

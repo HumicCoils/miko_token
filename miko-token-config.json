@@ -1,0 +1,24 @@
+{
+  "mint": "BiQUbqckzG7C4hhv6vCYBeEx7KDEgaXqK1M3x9X67KKh",
+  "decimals": 9,
+  "totalSupply": 1000000000,
+  "transferFeeBasisPoints": 500,
+  "treasuryWallet": "ESEQvotDCxHancsHSsV4UXLPrhyFe6K16ncbJbi9Y4DQ",
+  "treasuryTokenAccount": "9AXkEoo4VNq1YhUes5V1FAZhhT5wJ9DDpWNbEU5xo2ym",
+  "absoluteVaultProgram": "EMstwrRUs4dWeec9azA9RJB5Qu93A1F5Q34JyN3w4QFC",
+  "smartDialProgram": "67sZQtNqoRs5RjncYXMaeRAGrgUK49GSaLJCvHA2SXrj",
+  "status": {
+    "tokenCreated": true,
+    "mintAuthorityBurned": true,
+    "absoluteVaultInitialized": true,
+    "smartDialInitialized": true
+  },
+  "absoluteVault": {
+    "programId": "EMstwrRUs4dWeec9azA9RJB5Qu93A1F5Q34JyN3w4QFC",
+    "taxConfig": "7cEoxDCC5bHBVAdyhWR9zv63qdBTEVtEos2bm3MAtbe4",
+    "taxAuthorityPda": "EBBRpHhySXtphcgfoRCZeYWWgspWacBzBgASfAr81h95",
+    "taxHoldingPda": "8w2Ezuf4cQPmsiDwYJgzfcSEHwg1HKLpUtzWmmAqtJdi",
+    "initialized": true
+  },
+  "createdAt": "2025-06-11T16:23:55.028Z"
+}

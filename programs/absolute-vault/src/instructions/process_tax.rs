@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    token::{Token, TokenAccount, Mint},
+    token::{TokenAccount, Mint},
     associated_token::AssociatedToken,
 };
 use crate::{constants::*, errors::VaultError, state::TaxConfig};
@@ -42,17 +42,6 @@ pub struct ProcessTax<'info> {
     )]
     pub tax_holding_pda: UncheckedAccount<'info>,
     
-    /// CHECK: Owner wallet from Smart Dial - validated via CPI
-    #[account(mut)]
-    pub owner_wallet: UncheckedAccount<'info>,
-    
-    #[account(
-        mut,
-        associated_token::mint = token_mint,
-        associated_token::authority = owner_wallet,
-    )]
-    pub owner_token_account: Account<'info, TokenAccount>,
-    
     /// CHECK: Treasury wallet from Smart Dial - validated via CPI
     #[account(mut)]
     pub treasury_wallet: UncheckedAccount<'info>,
@@ -82,47 +71,18 @@ pub fn handler(ctx: Context<ProcessTax>) -> Result<()> {
         VaultError::UnauthorizedAccess
     );
     
-    // TODO: Add CPI call to Smart Dial to validate owner and treasury wallets
+    // TODO: Add CPI call to Smart Dial to validate treasury wallet
     
     // TODO: Implement withdrawal of withheld tokens from Token-2022
     // For now, we assume tokens are already in the tax holding account
     
     let total_tax = ctx.accounts.tax_holding_account.amount;
     
-    // Calculate splits
-    let owner_amount = total_tax
-        .checked_mul(OWNER_SHARE as u64).ok_or(VaultError::MathOverflow)?
-        .checked_div(TAX_RATE as u64).ok_or(VaultError::MathOverflow)?;
-    
-    let treasury_amount = total_tax
-        .checked_sub(owner_amount).ok_or(VaultError::MathOverflow)?;
-    
-    // Transfer to owner using CPI
+    // Transfer all tax to treasury (no split)
     let seeds = &[TAX_HOLDING_SEED, &[ctx.bumps.tax_holding_pda]];
     let signer = &[&seeds[..]];
     
-    // Transfer to owner
-    anchor_lang::solana_program::program::invoke_signed(
-        &spl_token_2022::instruction::transfer_checked(
-            &ctx.accounts.token_program.key(),
-            &ctx.accounts.tax_holding_account.key(),
-            &ctx.accounts.token_mint.key(),
-            &ctx.accounts.owner_token_account.key(),
-            &ctx.accounts.tax_holding_pda.key(),
-            &[],
-            owner_amount,
-            ctx.accounts.token_mint.decimals,
-        )?,
-        &[
-            ctx.accounts.tax_holding_account.to_account_info(),
-            ctx.accounts.token_mint.to_account_info(),
-            ctx.accounts.owner_token_account.to_account_info(),
-            ctx.accounts.tax_holding_pda.to_account_info(),
-        ],
-        signer,
-    )?;
-    
-    // Transfer to treasury
+    // Transfer entire amount to treasury
     anchor_lang::solana_program::program::invoke_signed(
         &spl_token_2022::instruction::transfer_checked(
             &ctx.accounts.token_program.key(),
@@ -131,7 +91,7 @@ pub fn handler(ctx: Context<ProcessTax>) -> Result<()> {
             &ctx.accounts.treasury_token_account.key(),
             &ctx.accounts.tax_holding_pda.key(),
             &[],
-            treasury_amount,
+            total_tax,
             ctx.accounts.token_mint.decimals,
         )?,
         &[
@@ -143,8 +103,7 @@ pub fn handler(ctx: Context<ProcessTax>) -> Result<()> {
         signer,
     )?;
     
-    msg!("Processed tax: {} total, {} to owner, {} to treasury", 
-        total_tax, owner_amount, treasury_amount);
+    msg!("Processed tax: {} total sent to treasury for swap", total_tax);
     
     Ok(())
 }

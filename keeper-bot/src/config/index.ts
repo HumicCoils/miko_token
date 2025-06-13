@@ -18,6 +18,9 @@ export interface Config {
     SMART_DIAL_PROGRAM_ID: PublicKey;
     MIKO_TOKEN_MINT: PublicKey;
     
+    // Wallets
+    EMERGENCY_FUND_ADDRESS: PublicKey;
+    
     // AI Agent
     AI_AGENT_TWITTER_ID: string;
     AI_AGENT_USERNAME: string;
@@ -70,6 +73,9 @@ export const config: Config = {
     ABSOLUTE_VAULT_PROGRAM_ID: validatePublicKey('ABSOLUTE_VAULT_PROGRAM_ID', process.env.ABSOLUTE_VAULT_PROGRAM_ID),
     SMART_DIAL_PROGRAM_ID: validatePublicKey('SMART_DIAL_PROGRAM_ID', process.env.SMART_DIAL_PROGRAM_ID),
     MIKO_TOKEN_MINT: validatePublicKey('MIKO_TOKEN_MINT', process.env.MIKO_TOKEN_MINT),
+    
+    // Wallets
+    EMERGENCY_FUND_ADDRESS: validatePublicKey('EMERGENCY_FUND_ADDRESS', process.env.EMERGENCY_FUND_ADDRESS || 'FwN6tCpJkHhuYxBKwcrGU6PDW4aRNuukQBi58ay4iYGM'),
     
     // AI Agent
     AI_AGENT_TWITTER_ID: "1807336107638001665",

@@ -1,0 +1,248 @@
+{
+  "version": "0.1.0",
+  "name": "absolute_vault",
+  "instructions": [
+    {
+      "name": "initialize",
+      "accounts": [
+        {
+          "name": "authority",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "taxConfig",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "taxAuthorityPda",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "taxHoldingPda",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "token2022Program",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "smartDialProgram",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "processTax",
+      "accounts": [
+        {
+          "name": "taxConfig",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "taxHoldingAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "taxHoldingPda",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "ownerTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "treasuryTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "updateHolders",
+      "accounts": [
+        {
+          "name": "authority",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "taxConfig",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "holderRegistry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "holders",
+          "type": {
+            "vec": "publicKey"
+          }
+        },
+        {
+          "name": "startIndex",
+          "type": "u32"
+        },
+        {
+          "name": "batchSize",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "distribute",
+      "accounts": [
+        {
+          "name": "authority",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "taxConfig",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "smartDialConfig",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "holderRegistry",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "treasuryTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "rewardMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "smartDialProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "TaxConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "publicKey"
+          },
+          {
+            "name": "tokenMint",
+            "type": "publicKey"
+          },
+          {
+            "name": "taxAuthorityPda",
+            "type": "publicKey"
+          },
+          {
+            "name": "taxHoldingPda",
+            "type": "publicKey"
+          },
+          {
+            "name": "smartDialProgram",
+            "type": "publicKey"
+          },
+          {
+            "name": "totalHolders",
+            "type": "u64"
+          },
+          {
+            "name": "holderRegistryCount",
+            "type": "u32"
+          },
+          {
+            "name": "initialized",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HolderRegistry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "holders",
+            "type": {
+              "vec": "publicKey"
+            }
+          },
+          {
+            "name": "registryIndex",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}

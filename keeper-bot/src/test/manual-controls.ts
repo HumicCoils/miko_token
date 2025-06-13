@@ -25,7 +25,7 @@ export function createTestRouter(scheduler: RewardScheduler): Router {
             res.json({ success: true, message: 'Reward check triggered' });
         } catch (error) {
             logger.error({ error }, 'Failed to trigger reward check');
-            res.status(500).json({ success: false, error: error.message });
+            res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
         }
     });
     
@@ -36,7 +36,7 @@ export function createTestRouter(scheduler: RewardScheduler): Router {
             res.json({ success: true, message: 'Distribution triggered' });
         } catch (error) {
             logger.error({ error }, 'Failed to trigger distribution');
-            res.status(500).json({ success: false, error: error.message });
+            res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
         }
     });
     
@@ -47,7 +47,7 @@ export function createTestRouter(scheduler: RewardScheduler): Router {
             res.json({ success: true, message: 'Holder update triggered' });
         } catch (error) {
             logger.error({ error }, 'Failed to update holders');
-            res.status(500).json({ success: false, error: error.message });
+            res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
         }
     });
     
@@ -87,7 +87,7 @@ export function createTestRouter(scheduler: RewardScheduler): Router {
             });
         } catch (error) {
             logger.error({ error }, 'Failed to set reward token');
-            res.status(500).json({ success: false, error: error.message });
+            res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
         }
     });
     

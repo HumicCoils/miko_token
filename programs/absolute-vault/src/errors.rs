@@ -37,4 +37,16 @@ pub enum VaultError {
     
     #[msg("Invalid reward amount")]
     InvalidRewardAmount,
+    
+    #[msg("Address already excluded from rewards")]
+    AlreadyExcluded,
+    
+    #[msg("Address not excluded from rewards")]
+    NotExcluded,
+    
+    #[msg("Address already exempt from tax")]
+    AlreadyExempt,
+    
+    #[msg("Address not exempt from tax")]
+    NotExempt,
 }

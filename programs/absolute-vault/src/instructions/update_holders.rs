@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::{constants::*, errors::VaultError, state::{TaxConfig, HolderRegistry, HolderInfo}};
+use crate::{constants::*, errors::VaultError, state::{TaxConfig, HolderRegistry, HolderInfo, RewardExclusions}};
 
 #[derive(Accounts)]
 #[instruction(chunk_id: u8)]
@@ -23,6 +23,12 @@ pub struct UpdateHolders<'info> {
     )]
     pub holder_registry: Account<'info, HolderRegistry>,
     
+    #[account(
+        seeds = [b"reward_exclusions"],
+        bump
+    )]
+    pub reward_exclusions: Option<Account<'info, RewardExclusions>>,
+    
     pub system_program: Program<'info, System>,
     /// CHECK: Token-2022 program
     pub token_2022_program: UncheckedAccount<'info>,
@@ -33,6 +39,7 @@ pub fn handler(
     chunk_id: u8,
     start_index: u32,
     batch_size: u32,
+    min_holder_threshold: u64,
 ) -> Result<()> {
     let holder_registry = &mut ctx.accounts.holder_registry;
     let clock = Clock::get()?;
@@ -75,10 +82,19 @@ impl UpdateHolders<'_> {
         holder_registry: &mut Account<HolderRegistry>,
         address: Pubkey,
         balance: u64,
+        min_holder_threshold: u64,
+        reward_exclusions: &Option<Account<RewardExclusions>>,
     ) -> Result<()> {
         // Check if holder meets threshold
-        if balance < MIN_HOLDER_THRESHOLD {
+        if balance < min_holder_threshold {
             return Ok(());
+        }
+        
+        // Check if holder is excluded from rewards
+        if let Some(exclusions) = reward_exclusions {
+            if exclusions.is_excluded(&address) {
+                return Ok(());
+            }
         }
         
         // Check if registry is full
