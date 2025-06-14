@@ -7,6 +7,15 @@
 - **Smart Dial**: `KNKv3pAEiA313iGTSWUZ9yLF5pPDSCpDKb3KLJ9ibPA`
 - **Authority**: `E7usUuVX4a6TGBvXuAiYvLtSdVyzRY4BmN9QwqAKSbdx`
 
+### Program Derived Addresses (PDAs)
+- **Tax Config**: `5qaShkcWvhifdpGQydAzbQpgn5AS9KX6BrdvB9NzcFeN`
+- **Tax Authority**: `ZFr85GkQVFqFzKnLxcswfhg4YsPq7TkgZ8WTY4wsLpu`
+- **Tax Holding**: `47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU`
+- **Holder Registry (chunk 0)**: `24SSXATiuGZednRjqbVinavMjPvqmJfQVnfMoUwJGJhS`
+- **Reward Exclusions**: `8C3HcKJr61mLQhV6ZypbC8jSdJxmrEn6M1JGifBZk8a8`
+- **Tax Exemptions**: `3XJCXHpn4Ujrjh79c3DXWrXGQagxspX3Rw8y2KuEE5uv`
+- **Smart Dial Config**: `55u8Xz2zFckw9giJ2eVRhYT6G7Vdyd4AnvhLYe5mEG2S`
+
 ### Features Ready for Testing
 1. **Tax Collection System** (5% on all transfers)
 2. **Three Scenario Distribution Logic**
@@ -46,12 +55,12 @@ ts-node scripts/create-miko-token.ts
 ```bash
 # Add exclusions before distributing tokens
 npm run add-reward-exclusion -- --address=MIKO_TOKEN_MINT_ADDRESS
-npm run add-reward-exclusion -- --address=TAX_HOLDING_PDA_ADDRESS
+npm run add-reward-exclusion -- --address=47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU
 npm run add-reward-exclusion -- --address=TREASURY_WALLET_ADDRESS
 
 # Add tax exemptions
 npm run add-tax-exemption -- --address=TREASURY_WALLET_ADDRESS
-npm run add-tax-exemption -- --address=TAX_HOLDING_PDA_ADDRESS
+npm run add-tax-exemption -- --address=47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU
 ```
 
 ### 4. Distribute Test Tokens
@@ -146,19 +155,19 @@ npm run dev:test
 ### Check Program States
 ```bash
 # View tax config
-solana account --url devnet $(solana address -k <(echo '[116,97,120,95,99,111,110,102,105,103]') --program-id 355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt)
+solana account --url devnet 5qaShkcWvhifdpGQydAzbQpgn5AS9KX6BrdvB9NzcFeN
 
 # View smart dial config
-solana account --url devnet $(solana address -k <(echo '[99,111,110,102,105,103]') --program-id KNKv3pAEiA313iGTSWUZ9yLF5pPDSCpDKb3KLJ9ibPA)
+solana account --url devnet 55u8Xz2zFckw9giJ2eVRhYT6G7Vdyd4AnvhLYe5mEG2S
 ```
 
 ### View Exclusions
 ```bash
 # Check reward exclusions
-solana account --url devnet $(solana address -k <(echo '[114,101,119,97,114,100,95,101,120,99,108,117,115,105,111,110,115]') --program-id 355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt)
+solana account --url devnet 8C3HcKJr61mLQhV6ZypbC8jSdJxmrEn6M1JGifBZk8a8
 
 # Check tax exemptions
-solana account --url devnet $(solana address -k <(echo '[116,97,120,95,101,120,101,109,112,116,105,111,110,115]') --program-id 355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt)
+solana account --url devnet 3XJCXHpn4Ujrjh79c3DXWrXGQagxspX3Rw8y2KuEE5uv
 ```
 
 ### Transaction History
