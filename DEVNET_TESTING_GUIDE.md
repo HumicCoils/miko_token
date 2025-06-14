@@ -26,9 +26,39 @@
 
 ## Testing Sequence
 
+### 0. Create Required Wallets
+
+```bash
+# Create keeper bot wallet
+solana-keygen new -o keeper-bot-wallet.json
+
+# Create treasury wallet
+solana-keygen new -o treasury-wallet.json
+
+# Create owner wallet
+solana-keygen new -o owner-wallet.json
+
+# Create test holder wallets
+solana-keygen new -o test-holder-1.json
+solana-keygen new -o test-holder-2.json
+solana-keygen new -o test-holder-3.json
+
+# Fund wallets with SOL
+solana airdrop 2 $(solana address -k keeper-bot-wallet.json) --url devnet
+solana airdrop 2 $(solana address -k treasury-wallet.json) --url devnet
+solana airdrop 2 $(solana address -k owner-wallet.json) --url devnet
+solana airdrop 2 $(solana address -k test-holder-1.json) --url devnet
+solana airdrop 2 $(solana address -k test-holder-2.json) --url devnet
+solana airdrop 2 $(solana address -k test-holder-3.json) --url devnet
+```
+
 ### 1. Initialize Programs
 
 ```bash
+# Make sure you have the deployer wallet configured
+export ANCHOR_WALLET=~/.config/solana/deployer-test.json
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+
 # Initialize Absolute Vault
 ts-node scripts/initialize-absolute-vault.ts
 
@@ -53,13 +83,16 @@ ts-node scripts/create-miko-token.ts
 ### 3. Test Exclusions
 
 ```bash
-# Add exclusions before distributing tokens
+# Get treasury wallet address
+TREASURY_ADDRESS=$(solana address -k treasury-wallet.json)
+
+# Add exclusions before distributing tokens (replace MIKO_TOKEN_MINT_ADDRESS with actual mint)
 npm run add-reward-exclusion -- --address=MIKO_TOKEN_MINT_ADDRESS
 npm run add-reward-exclusion -- --address=47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU
-npm run add-reward-exclusion -- --address=TREASURY_WALLET_ADDRESS
+npm run add-reward-exclusion -- --address=$TREASURY_ADDRESS
 
 # Add tax exemptions
-npm run add-tax-exemption -- --address=TREASURY_WALLET_ADDRESS
+npm run add-tax-exemption -- --address=$TREASURY_ADDRESS
 npm run add-tax-exemption -- --address=47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU
 ```
 
@@ -194,13 +227,13 @@ solana transaction-history KNKv3pAEiA313iGTSWUZ9yLF5pPDSCpDKb3KLJ9ibPA --url dev
 solana airdrop 2 --url devnet
 ```
 
-## Test Wallets Needed
+## Wallet Summary
 
-1. **Authority Wallet**: Controls programs
-2. **Treasury Wallet**: Receives collected taxes
-3. **Owner Wallet**: Receives owner share
-4. **Keeper Bot Wallet**: Executes distributions
-5. **Test Holder Wallets**: At least 3 for testing
+1. **Authority Wallet**: `~/.config/solana/deployer-test.json` (already exists)
+2. **Treasury Wallet**: `treasury-wallet.json` (create in step 0)
+3. **Owner Wallet**: `owner-wallet.json` (create in step 0)
+4. **Keeper Bot Wallet**: `keeper-bot-wallet.json` (create in step 0)
+5. **Test Holder Wallets**: `test-holder-*.json` (create in step 0)
 
 ## Next Steps After Testing
 
