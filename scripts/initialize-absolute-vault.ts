@@ -49,7 +49,7 @@ async function main() {
     
     console.log("Absolute Vault initialized successfully!");
     console.log("Transaction signature:", tx);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error initializing Absolute Vault:", error);
     if (error.toString().includes("already in use")) {
       console.log("Program is already initialized.");

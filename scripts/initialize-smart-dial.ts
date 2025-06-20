@@ -85,7 +85,7 @@ async function main() {
     
     console.log("Smart Dial initialized successfully!");
     console.log("Transaction signature:", tx);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error initializing Smart Dial:", error);
     if (error.toString().includes("already in use")) {
       console.log("Program is already initialized.");

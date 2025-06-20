@@ -3,18 +3,18 @@
 ## Current Deployment Status
 
 ### Deployed Programs
-- **Absolute Vault**: `355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt`
-- **Smart Dial**: `KNKv3pAEiA313iGTSWUZ9yLF5pPDSCpDKb3KLJ9ibPA`
+- **Absolute Vault**: `355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt` ✅
+- **Smart Dial**: `KNKv3pAEiA313iGTSWUZ9yLF5pPDSCpDKb3KLJ9ibPA` ✅
 - **Authority**: `E7usUuVX4a6TGBvXuAiYvLtSdVyzRY4BmN9QwqAKSbdx`
 
 ### Program Derived Addresses (PDAs)
-- **Tax Config**: `5qaShkcWvhifdpGQydAzbQpgn5AS9KX6BrdvB9NzcFeN`
+- **Tax Config**: `5qaShkcWvhifdpGQydAzbQpgn5AS9KX6BrdvB9NzcFeN` ✅ (initialized)
 - **Tax Authority**: `ZFr85GkQVFqFzKnLxcswfhg4YsPq7TkgZ8WTY4wsLpu`
 - **Tax Holding**: `47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU`
 - **Holder Registry (chunk 0)**: `24SSXATiuGZednRjqbVinavMjPvqmJfQVnfMoUwJGJhS`
-- **Reward Exclusions**: `8C3HcKJr61mLQhV6ZypbC8jSdJxmrEn6M1JGifBZk8a8`
-- **Tax Exemptions**: `3XJCXHpn4Ujrjh79c3DXWrXGQagxspX3Rw8y2KuEE5uv`
-- **Smart Dial Config**: `55u8Xz2zFckw9giJ2eVRhYT6G7Vdyd4AnvhLYe5mEG2S`
+- **Reward Exclusions**: `8C3HcKJr61mLQhV6ZypbC8jSdJxmrEn6M1JGifBZk8a8` ✅ (initialized)
+- **Tax Exemptions**: `3XJCXHpn4Ujrjh79c3DXWrXGQagxspX3Rw8y2KuEE5uv` ✅ (initialized)
+- **Smart Dial Config**: `61SdTSzy2F8qJQvtVkQ2n1ts4yGu3Jogw6xngyBwWQWo` ✅ (initialized, note: different from legacy address)
 
 ### Features Ready for Testing
 1. **Tax Collection System** (5% on all transfers)
@@ -26,47 +26,48 @@
 
 ## Testing Sequence
 
-### 0. Create Required Wallets
+### 0. Create Required Wallets ✅ COMPLETED
 
+**Note: Wallets have been created and funded. Current addresses:**
+- **Keeper Bot**: `35tNZ1k3yqUXc4nGpwxmfNoK2LWZ6GGThDf1XL8eFEeF` (keeper-bot-wallet.json)
+- **Treasury**: `D4o39LRU6EV4ZwkHN8D25Dw9nthiRhnD1qY9pcSZdAMZ` (treasury-wallet.json)
+- **Owner**: `HH8KwySQZPZanmYvjP2mL6xL2BVHhpPBRaFxQkJLAuhm` (owner-wallet.json)
+- **Test Holder 1**: `k8RGNTB2iW9nLidEuZ3vaXJQQGgaPng3Yhz5wrDrd3F` (test-holder-1.json)
+- **Test Holder 2**: `F4Hwo1Px1bz4FXaSsMJ41b7UmQ4jwAJdRppQ7sMGLJH6` (test-holder-2.json)
+- **Test Holder 3**: `BTYSDXKTiRfiXbHotKuQsnjpoNuLZxqb6VzEush5iv29` (test-holder-3.json)
+
+To check wallet balances:
 ```bash
-# Create keeper bot wallet
-solana-keygen new -o keeper-bot-wallet.json
-
-# Create treasury wallet
-solana-keygen new -o treasury-wallet.json
-
-# Create owner wallet
-solana-keygen new -o owner-wallet.json
-
-# Create test holder wallets
-solana-keygen new -o test-holder-1.json
-solana-keygen new -o test-holder-2.json
-solana-keygen new -o test-holder-3.json
-
-# Fund wallets with SOL
-solana airdrop 2 $(solana address -k keeper-bot-wallet.json) --url devnet
-solana airdrop 2 $(solana address -k treasury-wallet.json) --url devnet
-solana airdrop 2 $(solana address -k owner-wallet.json) --url devnet
-solana airdrop 2 $(solana address -k test-holder-1.json) --url devnet
-solana airdrop 2 $(solana address -k test-holder-2.json) --url devnet
-solana airdrop 2 $(solana address -k test-holder-3.json) --url devnet
+solana balance $(solana address -k keeper-bot-wallet.json) --url devnet
+solana balance $(solana address -k treasury-wallet.json) --url devnet
+solana balance $(solana address -k owner-wallet.json) --url devnet
+solana balance $(solana address -k test-holder-1.json) --url devnet
+solana balance $(solana address -k test-holder-2.json) --url devnet
+solana balance $(solana address -k test-holder-3.json) --url devnet
 ```
 
-### 1. Initialize Programs
+### 1. Initialize Programs ✅ COMPLETED
 
+**Note: This step has been completed successfully. Programs are initialized with the following accounts:**
+- Tax Config: `5qaShkcWvhifdpGQydAzbQpgn5AS9KX6BrdvB9NzcFeN`
+- Smart Dial Config: `61SdTSzy2F8qJQvtVkQ2n1ts4yGu3Jogw6xngyBwWQWo`
+- Reward Exclusions: `8C3HcKJr61mLQhV6ZypbC8jSdJxmrEn6M1JGifBZk8a8`
+- Tax Exemptions: `3XJCXHpn4Ujrjh79c3DXWrXGQagxspX3Rw8y2KuEE5uv`
+
+To re-initialize (if needed):
 ```bash
 # Make sure you have the deployer wallet configured
 export ANCHOR_WALLET=~/.config/solana/deployer-test.json
 export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
 
 # Initialize Absolute Vault
-ts-node scripts/initialize-absolute-vault.ts
+npx tsc scripts/init-absolute-vault.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/init-absolute-vault.js
 
 # Initialize Smart Dial
-ts-node scripts/initialize-smart-dial.ts
+npx tsc scripts/init-smart-dial.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/init-smart-dial.js
 
 # Initialize Exclusions
-npm run initialize-exclusions
+npx tsc scripts/init-exclusions.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/init-exclusions.js
 ```
 
 ### 2. Create MIKO Token
@@ -211,6 +212,28 @@ solana transaction-history KNKv3pAEiA313iGTSWUZ9yLF5pPDSCpDKb3KLJ9ibPA --url dev
 ```
 
 ## Common Issues & Solutions
+
+### Issue: "DeclaredProgramIdMismatch" error during initialization
+**Solution**: The program was deployed with a different keypair than declared in source code. Redeploy with correct keypair:
+```bash
+# For Absolute Vault
+solana program deploy target/deploy/absolute_vault.so --program-id target/deploy/absolute_vault_v2-keypair.json --url devnet
+
+# For Smart Dial
+solana program deploy target/deploy/smart_dial.so --program-id target/deploy/smart_dial-keypair.json --url devnet
+```
+
+### Issue: "ts-node" command hangs without output
+**Solution**: Compile TypeScript to JavaScript first:
+```bash
+npx tsc scripts/your-script.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/your-script.js
+```
+
+### Issue: Missing exclusion instructions in IDL
+**Solution**: Regenerate IDL from source:
+```bash
+anchor idl parse --file programs/absolute-vault/src/lib.rs -o target/idl/absolute_vault.json
+```
 
 ### Issue: "Account does not exist"
 **Solution**: Initialize the programs first
