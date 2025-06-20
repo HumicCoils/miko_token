@@ -70,15 +70,24 @@ npx tsc scripts/init-smart-dial.ts --outDir dist --esModuleInterop --resolveJson
 npx tsc scripts/init-exclusions.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/init-exclusions.js
 ```
 
-### 2. Create MIKO Token
+### 2. Create MIKO Token ✅ COMPLETED
 
+**Note: MIKO token has been created successfully with the following details:**
+- **Token Mint**: `2MUUbBrQywdvvyLCZN7qquxcRqup9nPXZTjxAoaECLR5`
+- **Total Supply**: 1,000,000,000 MIKO
+- **Transfer Fee**: 5% (500 basis points)
+- **Treasury Token Account**: `6kXwELbkQVTrdmgQEfjTKtCyopoRooXWt4xgfMd4CPuc`
+- **All tokens minted to treasury wallet**
+
+To create MIKO token (if needed):
 ```bash
 # Create Token-2022 mint with 5% transfer fee
-ts-node scripts/create-miko-token.ts
+npx tsc scripts/create-miko-token.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/create-miko-token.js
 
 # This will output:
 # - MIKO Token Mint Address
-# - Update this in keeper-bot/.env.devnet
+# - Token configuration saved to config/miko-token.json
+# - Update the mint address in keeper-bot/.env.devnet
 ```
 
 ### 3. Test Exclusions
@@ -234,6 +243,13 @@ npx tsc scripts/your-script.ts --outDir dist --esModuleInterop --resolveJsonModu
 ```bash
 anchor idl parse --file programs/absolute-vault/src/lib.rs -o target/idl/absolute_vault.json
 ```
+
+### Issue: "create-miko-token.ts" file not found
+**Solution**: The correct file is `create-miko-token.ts` (created separately). The original `create-token.ts` had import issues. Use the new script which properly:
+- Sets up Token-2022 with transfer fee extension
+- Assigns tax authorities to the Absolute Vault PDAs
+- Mints total supply to treasury
+- Burns mint authority for immutable supply
 
 ### Issue: "Account does not exist"
 **Solution**: Initialize the programs first
