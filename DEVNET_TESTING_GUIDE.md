@@ -90,93 +90,100 @@ npx tsc scripts/create-miko-token.ts --outDir dist --esModuleInterop --resolveJs
 # - Update the mint address in keeper-bot/.env.devnet
 ```
 
-### 3. Test Exclusions
+### 3. Test Exclusions ✅ COMPLETED
 
+**Note: Exclusions have been configured with the following:**
+- **Reward Exclusions**: MIKO Token Mint, Tax Holding PDA, Treasury Wallet
+- **Tax Exemptions**: Treasury Wallet, Tax Holding PDA
+
+To add exclusions (if needed):
 ```bash
-# Get treasury wallet address
-TREASURY_ADDRESS=$(solana address -k treasury-wallet.json)
+# Run the combined exclusions script
+npx tsc scripts/add-exclusions.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/add-exclusions.js
 
-# Add exclusions before distributing tokens (replace MIKO_TOKEN_MINT_ADDRESS with actual mint)
-npm run add-reward-exclusion -- --address=MIKO_TOKEN_MINT_ADDRESS
-npm run add-reward-exclusion -- --address=47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU
-npm run add-reward-exclusion -- --address=$TREASURY_ADDRESS
-
-# Add tax exemptions
-npm run add-tax-exemption -- --address=$TREASURY_ADDRESS
-npm run add-tax-exemption -- --address=47tFEm5Y6piZ28mSawiFajkHXfmgj8jmhDy1N2X1ihRU
+# Or use individual npm scripts (requires fixing for current setup):
+# npm run add-reward-exclusion -- --address=ADDRESS_TO_EXCLUDE
+# npm run add-tax-exemption -- --address=ADDRESS_TO_EXEMPT
 ```
 
-### 4. Distribute Test Tokens
+### 4. Distribute Test Tokens ✅ COMPLETED
 
+**Note: Test tokens have been distributed with the following balances (after 5% transfer fee):**
+- **Test Holder 1**: 9,500,000 MIKO (above $100 threshold)
+- **Test Holder 2**: 475,000 MIKO (below $100 threshold)
+- **Test Holder 3**: 4,750,000 MIKO (above $100 threshold)
+
+To distribute tokens (if needed):
 ```bash
-# Mint and distribute MIKO tokens to test wallets
-ts-node scripts/distribute-test-tokens.ts
-
-# Creates test holders with various balances:
-# - Wallet 1: 10M tokens (above $100 threshold)
-# - Wallet 2: 500K tokens (below $100 threshold)
-# - Wallet 3: 5M tokens (above $100 threshold)
+# Distribute MIKO tokens to test wallets
+npx tsc scripts/distribute-test-tokens.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/distribute-test-tokens.js
 ```
 
 ### 5. Test Tax Collection
 
 ```bash
 # Make transfers to trigger tax collection
-ts-node scripts/test-tax-collection.ts
+npx tsc scripts/test-tax-collection.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/test-tax-collection.js
 
 # This will:
-# - Transfer tokens between wallets
-# - Verify 5% tax is collected
-# - Check tax exemptions work
+# - Transfer 1M tokens from Holder 1 to Holder 2 (5% tax)
+# - Transfer 500K tokens from Holder 3 to Holder 1 (5% tax)
+# - Transfer 100K tokens from Treasury to Holder 1 (tax exempt)
+# - Verify tax collection and exemptions work correctly
 ```
 
 ### 6. Test Reward Distribution Scenarios
 
 #### Scenario 1: Normal Operation
 ```bash
-# Ensure keeper bot has >= 0.05 SOL
-# Set reward token to USDC
-ts-node scripts/test-scenario-1.ts
+# Ensure keeper bot has >= 0.05 SOL and set reward token to USDC
+npx tsc scripts/test-scenario-1.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/test-scenario-1.js
 
-# Verifies:
-# - All 5% swapped to USDC
-# - 80% distributed to eligible holders
-# - 20% sent to owner
+# Configures:
+# - Keeper bot balance >= 0.05 SOL
+# - Reward token set to USDC
+# - Expected: All 5% swapped to USDC, 80% to holders, 20% to owner
 ```
 
 #### Scenario 2: Low SOL Balance
 ```bash
-# Drain keeper bot to < 0.05 SOL
-# Set reward token to BONK
-ts-node scripts/test-scenario-2.ts
+# Simulate low keeper bot balance and set reward token to BONK
+npx tsc scripts/test-scenario-2.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/test-scenario-2.js
 
-# Verifies:
-# - 4% swapped to BONK (all to holders)
-# - 1% swapped to SOL (to owner)
-# - Keeper bot topped up to 0.1 SOL
+# Configures:
+# - Keeper bot balance < 0.05 SOL
+# - Reward token set to BONK
+# - Expected: 4% to BONK (holders), 1% to SOL (keeper top-up + owner)
 ```
 
 #### Scenario 3: Reward Token is SOL
 ```bash
 # Set reward token to SOL
-ts-node scripts/test-scenario-3.ts
+npx tsc scripts/test-scenario-3.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/test-scenario-3.js
 
-# Verifies:
-# - All 5% swapped to SOL
-# - 80% to holders
-# - 20% handled per scenario 2 logic
+# Configures:
+# - Reward token set to SOL
+# - Tests both keeper balance scenarios
+# - Expected: All 5% to SOL, 80% to holders, 20% based on keeper balance
 ```
+
+**Note**: These scripts configure the scenarios but actual reward distribution requires:
+- Tax collection in the holding account
+- Jupiter integration for token swaps
+- Calling processCollectedTaxes and calculateAndDistributeRewards functions
 
 ### 7. Test Holder Registry
 
 ```bash
 # Update holder registry with dynamic threshold
-ts-node scripts/test-holder-registry.ts
+npx tsc scripts/test-holder-registry.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/test-holder-registry.js
 
-# Verifies:
-# - Only holders with $100+ worth included
-# - Excluded addresses not in registry
-# - Proportional share calculations correct
+# This will:
+# - Check all holder balances
+# - Update registry with $100 USD threshold (mock price: $0.001/MIKO = 100,000 tokens)
+# - Verify only eligible holders are included
+# - Calculate proportional shares for distribution
+# - Verify excluded addresses are not in registry
 ```
 
 ### 8. Keeper Bot Integration
@@ -250,6 +257,21 @@ anchor idl parse --file programs/absolute-vault/src/lib.rs -o target/idl/absolut
 - Assigns tax authorities to the Absolute Vault PDAs
 - Mints total supply to treasury
 - Burns mint authority for immutable supply
+
+### Issue: Test scripts mentioned in guide don't exist
+**Solution**: All test scripts have been created:
+- `distribute-test-tokens.ts` - Distributes tokens to test wallets
+- `test-tax-collection.ts` - Tests transfers and tax collection
+- `test-scenario-1.ts` - Normal operation scenario
+- `test-scenario-2.ts` - Low SOL balance scenario
+- `test-scenario-3.ts` - SOL as reward token scenario
+- `test-holder-registry.ts` - Tests holder eligibility and registry
+
+### Issue: Scripts need to be compiled before running
+**Solution**: All TypeScript scripts need to be compiled first:
+```bash
+npx tsc scripts/SCRIPT_NAME.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/SCRIPT_NAME.js
+```
 
 ### Issue: "Account does not exist"
 **Solution**: Initialize the programs first
