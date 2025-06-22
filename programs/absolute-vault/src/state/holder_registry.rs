@@ -1,34 +1,19 @@
 use anchor_lang::prelude::*;
+use crate::constants::MAX_HOLDERS_PER_REGISTRY;
 
 #[account]
 pub struct HolderRegistry {
-    pub eligible_holders: Vec<HolderInfo>,
-    pub last_snapshot_slot: u64,
-    pub total_eligible_balance: u64,
-    pub chunk_id: u8,
-    pub next_chunk: Option<Pubkey>,
-    pub min_holder_threshold: u64,  // Dynamic threshold based on USD value
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct HolderInfo {
-    pub address: Pubkey,
-    pub balance: u64,
-    pub reward_share: u64,
+    pub holders: Vec<Pubkey>,
+    pub balances: Vec<u64>,
+    pub last_update: i64,
+    pub total_eligible: u64,
 }
 
 impl HolderRegistry {
-    pub const BASE_LEN: usize = 8 + // discriminator
-        4 + // vec length
-        8 + // last_snapshot_slot
-        8 + // total_eligible_balance
-        1 + // chunk_id
-        1 + 32 + // next_chunk Option<Pubkey>
-        8; // min_holder_threshold
-    
-    pub const HOLDER_INFO_LEN: usize = 32 + 8 + 8; // address + balance + reward_share
-    
-    pub fn space(max_holders: usize) -> usize {
-        Self::BASE_LEN + (Self::HOLDER_INFO_LEN * max_holders)
-    }
+    pub const LEN: usize = 8 + // discriminator
+        4 + (32 * MAX_HOLDERS_PER_REGISTRY) + // holders vec
+        4 + (8 * MAX_HOLDERS_PER_REGISTRY) +  // balances vec
+        8 + // last_update
+        8 + // total_eligible
+        64; // padding
 }

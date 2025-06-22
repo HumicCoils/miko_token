@@ -1,29 +1,28 @@
 use anchor_lang::prelude::*;
 
 #[account]
-pub struct SmartDialConfig {
-    pub current_reward_token_mint: Pubkey,
-    pub keeper_bot_pubkey: Pubkey,
+pub struct DialConfig {
+    pub authority: Pubkey,
+    pub keeper_bot_wallet: Pubkey,
     pub treasury_wallet: Pubkey,
-    pub owner_wallet: Pubkey,
-    pub ai_agent_twitter_id: String,  // @project_miko
-    pub admin: Pubkey,                 // For emergency updates
+    pub current_reward_token: Pubkey,
+    pub current_token_symbol: String,
+    pub last_update: i64,
+    pub total_updates: u64,
     pub initialized: bool,
     pub bump: u8,
 }
 
-impl SmartDialConfig {
-    pub const MAX_TWITTER_ID_LEN: usize = 32;
-    
+impl DialConfig {
     pub const LEN: usize = 8 + // discriminator
-        32 + // current_reward_token_mint
-        32 + // keeper_bot_pubkey
+        32 + // authority
+        32 + // keeper_bot_wallet
         32 + // treasury_wallet
-        32 + // owner_wallet
-        4 + Self::MAX_TWITTER_ID_LEN + // String (length prefix + max content)
-        32 + // admin
+        32 + // current_reward_token
+        32 + // current_token_symbol (max 32 chars)
+        8 +  // last_update
+        8 +  // total_updates
         1 +  // initialized
-        1;   // bump
+        1 +  // bump
+        64;  // padding
 }
-
-pub const SMART_DIAL_CONFIG_SEED: &[u8] = b"smart_dial_config";

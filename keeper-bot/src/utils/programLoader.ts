@@ -1,15 +1,14 @@
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
-import { AnchorProvider, Program, Wallet } from '@project-serum/anchor';
+import { AnchorProvider, Program, Wallet } from '@coral-xyz/anchor';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './logger';
-import { config } from '../config';
 
 export async function loadPrograms(connection: Connection, wallet: Keypair) {
   const provider = new AnchorProvider(
     connection,
     new Wallet(wallet),
-    { commitment: config.COMMITMENT_LEVEL }
+    { commitment: 'confirmed' }
   );
 
   // Load IDLs
@@ -24,13 +23,13 @@ export async function loadPrograms(connection: Connection, wallet: Keypair) {
   // Create program instances
   const absoluteVault = new Program(
     absoluteVaultIdl,
-    new PublicKey(config.ABSOLUTE_VAULT_PROGRAM),
+    new PublicKey(process.env.ABSOLUTE_VAULT_PROGRAM!),
     provider
   );
   
   const smartDial = new Program(
     smartDialIdl,
-    new PublicKey(config.SMART_DIAL_PROGRAM),
+    new PublicKey(process.env.SMART_DIAL_PROGRAM!),
     provider
   );
 

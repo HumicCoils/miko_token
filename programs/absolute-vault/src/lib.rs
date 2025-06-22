@@ -7,7 +7,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt");
+declare_id!("AVau1tVPk2k8uNzxQJbCqZUWhFbmcDQ4ejZvvYPfxJZG");
 
 #[program]
 pub mod absolute_vault {
@@ -22,74 +22,41 @@ pub mod absolute_vault {
         instructions::initialize::handler(ctx, smart_dial_program, keeper_bot_wallet, owner_wallet)
     }
 
-    pub fn process_collected_taxes(
-        ctx: Context<ProcessTax>,
+    pub fn harvest_and_collect_fees(
+        ctx: Context<HarvestAndCollectFees>,
+        source_accounts: Vec<Pubkey>,
     ) -> Result<()> {
-        instructions::process_tax::handler(ctx)
+        instructions::harvest_fees::handler(ctx, source_accounts)
     }
 
     pub fn update_holder_registry(
-        ctx: Context<UpdateHolders>,
-        chunk_id: u8,
-        start_index: u32,
-        batch_size: u32,
-        min_holder_threshold: u64,
+        ctx: Context<UpdateHolderRegistry>,
+        holders: Vec<Pubkey>,
+        balances: Vec<u64>,
     ) -> Result<()> {
-        instructions::update_holders::handler(ctx, chunk_id, start_index, batch_size, min_holder_threshold)
+        instructions::update_holders::handler(ctx, holders, balances)
     }
 
-    pub fn calculate_and_distribute_rewards(
+    pub fn distribute_rewards(
         ctx: Context<DistributeRewards>,
-        reward_token_amount: u64,
+        reward_token_mint: Pubkey,
     ) -> Result<()> {
-        instructions::distribute::handler(ctx, reward_token_amount)
+        instructions::distribute_rewards::handler(ctx, reward_token_mint)
     }
 
-    pub fn initialize_exclusions(
-        ctx: Context<InitializeExclusions>,
-        initial_reward_exclusions: Vec<Pubkey>,
-        initial_tax_exemptions: Vec<Pubkey>,
+    pub fn add_exclusion(
+        ctx: Context<ManageExclusions>,
+        wallet: Pubkey,
+        exclusion_type: ExclusionType,
     ) -> Result<()> {
-        instructions::manage_exclusions::initialize_exclusions(ctx, initial_reward_exclusions, initial_tax_exemptions)
+        instructions::manage_exclusions::add_exclusion(ctx, wallet, exclusion_type)
     }
 
-    pub fn add_reward_exclusion(
-        ctx: Context<UpdateRewardExclusions>,
-        address: Pubkey,
+    pub fn remove_exclusion(
+        ctx: Context<ManageExclusions>,
+        wallet: Pubkey,
+        exclusion_type: ExclusionType,
     ) -> Result<()> {
-        instructions::manage_exclusions::add_reward_exclusion(ctx, address)
-    }
-
-    pub fn remove_reward_exclusion(
-        ctx: Context<UpdateRewardExclusions>,
-        address: Pubkey,
-    ) -> Result<()> {
-        instructions::manage_exclusions::remove_reward_exclusion(ctx, address)
-    }
-
-    pub fn add_tax_exemption(
-        ctx: Context<UpdateTaxExemptions>,
-        address: Pubkey,
-    ) -> Result<()> {
-        instructions::manage_exclusions::add_tax_exemption(ctx, address)
-    }
-
-    pub fn remove_tax_exemption(
-        ctx: Context<UpdateTaxExemptions>,
-        address: Pubkey,
-    ) -> Result<()> {
-        instructions::manage_exclusions::remove_tax_exemption(ctx, address)
-    }
-
-    pub fn collect_and_distribute(
-        ctx: Context<CollectAndDistribute>,
-    ) -> Result<()> {
-        instructions::collect_and_distribute::handler(ctx)
-    }
-
-    pub fn check_exemption(
-        ctx: Context<CheckExemption>,
-    ) -> Result<ExemptionStatus> {
-        instructions::check_exemption::handler(ctx)
+        instructions::manage_exclusions::remove_exclusion(ctx, wallet, exclusion_type)
     }
 }

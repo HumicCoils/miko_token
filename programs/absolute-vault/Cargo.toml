@@ -1,7 +1,7 @@
 [package]
 name = "absolute-vault"
 version = "0.1.0"
-description = "MIKO Token tax collection and distribution program"
+description = "MIKO token tax collection and distribution"
 edition = "2021"
 
 [lib]
@@ -16,7 +16,7 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = { version = "0.29.0", features = ["init-if-needed"] }
-anchor-spl = { version = "0.29.0", features = ["token", "associated_token"] }
+anchor-lang = "0.29.0"
+anchor-spl = "0.29.0"
 spl-token = { version = "4.0", features = ["no-entrypoint"] }
-spl-token-2022 = { version = "0.9", features = ["no-entrypoint"] }
+spl-token-2022 = { version = "1.0", features = ["no-entrypoint"] }

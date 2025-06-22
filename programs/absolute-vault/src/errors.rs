@@ -2,29 +2,8 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum VaultError {
-    #[msg("Already initialized")]
-    AlreadyInitialized,
-    
     #[msg("Not initialized")]
     NotInitialized,
-    
-    #[msg("Invalid tax configuration")]
-    InvalidTaxConfig,
-    
-    #[msg("Insufficient funds for distribution")]
-    InsufficientFunds,
-    
-    #[msg("Invalid holder registry")]
-    InvalidHolderRegistry,
-    
-    #[msg("Holder registry chunk full")]
-    HolderRegistryChunkFull,
-    
-    #[msg("Invalid chunk ID")]
-    InvalidChunkId,
-    
-    #[msg("No eligible holders")]
-    NoEligibleHolders,
     
     #[msg("Unauthorized access")]
     UnauthorizedAccess,
@@ -35,18 +14,21 @@ pub enum VaultError {
     #[msg("Invalid token mint")]
     InvalidTokenMint,
     
-    #[msg("Invalid reward amount")]
-    InvalidRewardAmount,
+    #[msg("Holder registry full")]
+    HolderRegistryFull,
     
-    #[msg("Address already excluded from rewards")]
-    AlreadyExcluded,
+    #[msg("Wallet already excluded")]
+    WalletAlreadyExcluded,
     
-    #[msg("Address not excluded from rewards")]
-    NotExcluded,
+    #[msg("Wallet not excluded")]
+    WalletNotExcluded,
     
-    #[msg("Address already exempt from tax")]
-    AlreadyExempt,
+    #[msg("Invalid exclusion type")]
+    InvalidExclusionType,
     
-    #[msg("Address not exempt from tax")]
-    NotExempt,
+    #[msg("No fees to collect")]
+    NoFeesToCollect,
+    
+    #[msg("Invalid holder data")]
+    InvalidHolderData,
 }

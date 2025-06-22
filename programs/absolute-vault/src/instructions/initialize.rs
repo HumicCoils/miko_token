@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::{constants::*, errors::VaultError, state::TaxConfig};
+use crate::{constants::*, errors::VaultError, state::{TaxConfig, ExclusionList}};
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -15,26 +15,36 @@ pub struct Initialize<'info> {
     )]
     pub tax_config: Account<'info, TaxConfig>,
     
-    /// CHECK: PDA for tax authority
     #[account(
-        seeds = [TAX_AUTHORITY_SEED],
+        init,
+        payer = authority,
+        space = ExclusionList::LEN,
+        seeds = [EXCLUSIONS_SEED],
         bump
     )]
-    pub tax_authority_pda: UncheckedAccount<'info>,
+    pub exclusion_list: Account<'info, ExclusionList>,
     
-    /// CHECK: PDA for tax holding
+    /// CHECK: Fee authority PDA for Token-2022
     #[account(
-        seeds = [TAX_HOLDING_SEED],
+        seeds = [FEE_AUTHORITY_SEED],
         bump
     )]
-    pub tax_holding_pda: UncheckedAccount<'info>,
+    pub fee_authority: UncheckedAccount<'info>,
     
-    /// CHECK: Token mint to be validated
-    pub token_mint: UncheckedAccount<'info>,
+    /// CHECK: Withdraw authority PDA for Token-2022
+    #[account(
+        seeds = [WITHDRAW_AUTHORITY_SEED],
+        bump
+    )]
+    pub withdraw_authority: UncheckedAccount<'info>,
+    
+    /// CHECK: Treasury wallet from Smart Dial
+    pub treasury_wallet: UncheckedAccount<'info>,
+    
+    /// CHECK: MIKO token mint
+    pub miko_token_mint: UncheckedAccount<'info>,
     
     pub system_program: Program<'info, System>,
-    /// CHECK: Token-2022 program
-    pub token_2022_program: UncheckedAccount<'info>,
 }
 
 pub fn handler(
@@ -44,23 +54,36 @@ pub fn handler(
     owner_wallet: Pubkey,
 ) -> Result<()> {
     let tax_config = &mut ctx.accounts.tax_config;
+    let exclusion_list = &mut ctx.accounts.exclusion_list;
     
-    require!(!tax_config.initialized, VaultError::AlreadyInitialized);
-    
+    // Initialize tax config
     tax_config.authority = ctx.accounts.authority.key();
-    tax_config.tax_authority_pda = ctx.accounts.tax_authority_pda.key();
-    tax_config.tax_holding_pda = ctx.accounts.tax_holding_pda.key();
+    tax_config.miko_token_mint = ctx.accounts.miko_token_mint.key();
+    tax_config.fee_authority = ctx.accounts.fee_authority.key();
+    tax_config.withdraw_authority = ctx.accounts.withdraw_authority.key();
     tax_config.smart_dial_program = smart_dial_program;
-    tax_config.token_mint = ctx.accounts.token_mint.key();
     tax_config.keeper_bot_wallet = keeper_bot_wallet;
     tax_config.owner_wallet = owner_wallet;
+    tax_config.treasury_wallet = ctx.accounts.treasury_wallet.key();
+    tax_config.total_fees_collected = 0;
     tax_config.initialized = true;
     tax_config.bump = ctx.bumps.tax_config;
     
-    msg!("Absolute Vault initialized with tax rate: {}%", TAX_RATE);
-    msg!("Owner wallet: {} (receives 1%)", owner_wallet);
-    msg!("Treasury receives 4% for swapping and distribution");
-    msg!("Keeper bot wallet: {}", keeper_bot_wallet);
+    // Initialize exclusion list
+    exclusion_list.authority = ctx.accounts.authority.key();
+    exclusion_list.reward_exclusions = vec![
+        // Exclude program accounts
+        smart_dial_program,
+        ctx.program_id.clone(),
+        tax_config.treasury_wallet,
+        spl_token_2022::id(),
+    ];
+    exclusion_list.tax_exemptions = vec![];
+    exclusion_list.bump = ctx.bumps.exclusion_list;
+    
+    msg!("Absolute Vault initialized");
+    msg!("Fee authority: {}", tax_config.fee_authority);
+    msg!("Withdraw authority: {}", tax_config.withdraw_authority);
     
     Ok(())
 }

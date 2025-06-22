@@ -1,0 +1,17 @@
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+absolute_vault = "AVau1tVPk2k8uNzxQJbCqZUWhFbmcDQ4ejZvvYPfxJZG"
+smart_dial = "SDia1z3nQJGbcVMnEqFxGEUH5WMCWsUruKFMQkwvjLn"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

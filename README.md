@@ -1,211 +1,81 @@
-# MIKO Token - Solana Tax & Reward Distribution System
+# MIKO Token System
 
-A Solana blockchain project implementing an innovative tax and reward distribution system for the MIKO token with automated collection and distribution.
-
-## 🚀 Architecture Update
-
-The system has been redesigned to eliminate dependency on Token-2022 transfer fees and implement a more robust tax collection mechanism using a custom transfer wrapper program.
+A Solana-based token with automated 5% tax on DEX trades, AI-driven reward distribution, and dynamic holder eligibility.
 
 ## Overview
 
-MIKO Token implements a 5% tax on all transfers with intelligent distribution:
+MIKO Token implements an automated tax and reward system that works seamlessly with Solana DEXs (Raydium, Meteora, Orca, etc.):
 
-### Tax Distribution
-- **1% to Owner Wallet**: Direct reward for project sustainability
-- **4% to Treasury**: Swapped to reward tokens and distributed to eligible holders
+- **5% Tax on All DEX Trades**: Using Token-2022 transfer fees
+- **AI-Driven Rewards**: @project_miko selects weekly reward tokens
+- **Automated Distribution**: Tax collected and distributed every 5 minutes
+- **Dynamic Eligibility**: $100+ USD minimum holding requirement
 
-### Key Features
-- **Automated Tax Collection**: Custom transfer wrapper ensures tax is always collected
-- **AI-Driven Rewards**: @project_miko tweets determine weekly reward tokens
-- **Dynamic Eligibility**: Holders need $100+ USD worth of MIKO to receive rewards
-- **Fully Automated**: Keeper bot handles all operations without manual intervention
+## Tax Distribution
 
-## Architecture Components
+- **1% to Owner**: Direct payment for project maintenance
+- **4% to Treasury**: Converted to reward tokens and distributed to holders
 
-### 1. MIKO Transfer Program (NEW)
-- Custom transfer wrapper that automatically deducts 5% tax
-- Sends tax to Absolute Vault's holding account
-- Checks tax exemption status via CPI
-- Ensures tax cannot be bypassed
+## System Components
 
-### 2. Absolute Vault Program (Updated)
-- Collects taxes from transfer wrapper's holding account
-- Splits tax: 1% to owner, 4% to treasury
-- Maintains holder registry with eligibility tracking
-- Distributes rewards to qualified holders
-- Manages tax exemptions and reward exclusions
+### 1. MIKO Token (Token-2022)
+- SPL Token-2022 with 5% transfer fee extension
+- Fees automatically collected on ALL transfers (including DEX trades)
+- Withheld fees accumulate in token accounts
 
-### 3. Smart Dial Program
+### 2. Absolute Vault Program
+- Harvests accumulated transfer fees
+- Splits: 1% to owner, 4% to treasury
+- Maintains holder registry with USD-based eligibility
+- Manages exclusions for non-user wallets
+
+### 3. Smart Dial Program  
 - Stores current reward token selection
-- Updated weekly based on AI agent tweets
-- Only keeper bot can update selections
-- Maintains treasury and owner wallet addresses
+- Updated weekly by keeper bot
+- Maintains treasury wallet configuration
 
-### 4. Keeper Bot (TypeScript)
-- **AI Monitor**: Watches @project_miko tweets for token mentions
-- **Tax Collector**: Triggers periodic tax collection and distribution
-- **Registry Updater**: Maintains holder eligibility based on USD value
-- **Reward Distributor**: Swaps treasury funds and distributes to holders
-- **Health Monitor**: Ensures system reliability with metrics and alerts
+### 4. Keeper Bot
+- **Monday 03:00 UTC**: Checks @project_miko tweets for reward token
+- **Every 5 minutes**: Harvests fees, swaps to rewards, distributes
+- **Continuous**: Updates holder eligibility based on USD value
+- **Automated**: No manual intervention required
 
-## Program Flow
+## Technical Architecture
 
-### Transfer Flow
-1. User initiates transfer using MIKO Transfer program
-2. Transfer wrapper automatically deducts 5% tax
-3. Net amount (95%) sent to recipient
-4. Tax (5%) sent to holding account
-
-### Tax Collection Flow
-1. Keeper bot monitors tax accumulation
-2. When threshold reached, triggers collection
-3. Absolute Vault splits: 1% to owner, 4% to treasury
-4. Logged for audit trail
-
-### Weekly Reward Cycle
-1. **Monday**: AI agent tweets new reward token
-2. Keeper bot parses tweet and validates token
-3. Updates Smart Dial with new reward token
-4. Refreshes holder registry ($100+ USD eligibility)
-5. Swaps treasury MIKO to reward token via Jupiter
-6. Distributes pro-rata to eligible holders
-
-## Deployment
-
-### Programs
-- **Absolute Vault**: `355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt`
-- **Smart Dial**: `[TO BE DEPLOYED]`
-- **MIKO Transfer**: `6THY8LLbyALh8mTQqKgKofVzo6VVq7sCZbFUnVWfpj6g`
-
-### Build Programs
-```bash
-# Build all programs
-cd programs/absolute-vault && cargo build-sbf
-cd ../smart-dial && cargo build-sbf
-cd ../miko-transfer && cargo build-sbf
+### Token-2022 Transfer Fees
+```rust
+// 5% fee on every transfer (including DEX trades)
+transfer_fee_config {
+    transfer_fee_basis_points: 500,  // 5%
+    maximum_fee: u64::MAX,
+}
 ```
 
-### Deploy Programs
-```bash
-# Deploy to devnet
-solana program deploy --program-id <keypair> target/deploy/<program>.so
+### Fee Collection Flow
+1. Users trade on any DEX (Raydium, Meteora, etc.)
+2. 5% fee automatically withheld in their token accounts
+3. Keeper bot harvests fees every 5 minutes
+4. Fees sent to Absolute Vault for distribution
 
-# IMPORTANT: After mainnet deployment, burn upgrade authority
-solana program set-upgrade-authority <PROGRAM_ID> --new-upgrade-authority 11111111111111111111111111111111
-```
+### Reward Distribution Flow
+1. AI tweets reward token selection (Monday 00:00-02:00 UTC)
+2. Keeper bot detects tweet at 03:00 UTC
+3. Extracts $SYMBOL mentions, queries Birdeye
+4. Selects token with highest 24h volume
+5. Updates Smart Dial with new reward token
+6. Every 5 minutes: swaps treasury to rewards and distributes
 
-## Keeper Bot Setup
+## Programs
 
-### Environment Configuration
-```env
-# Solana Configuration
-SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-SOLANA_WS_URL=wss://api.mainnet-beta.solana.com
+- **Absolute Vault**: Tax collection and distribution
+- **Smart Dial**: Reward token configuration
+- **Token-2022**: MIKO token with transfer fees
 
-# Program IDs
-ABSOLUTE_VAULT_PROGRAM=355Ey2cQSCMmBRSnbKSQJfvCcXzzyCC3eC1nGTyeaFXt
-SMART_DIAL_PROGRAM=[YOUR_PROGRAM_ID]
-MIKO_TRANSFER_PROGRAM=6THY8LLbyALh8mTQqKgKofVzo6VVq7sCZbFUnVWfpj6g
+## Requirements
 
-# Token Configuration
-MIKO_TOKEN_MINT=[YOUR_TOKEN_MINT]
-TREASURY_WALLET=[YOUR_TREASURY_WALLET]
-
-# Keeper Bot
-KEEPER_BOT_PRIVATE_KEY=[BASE64_ENCODED_PRIVATE_KEY]
-TAX_COLLECTION_THRESHOLD=10000  # 10,000 MIKO
-
-# External APIs
-TWITTER_BEARER_TOKEN=[YOUR_TWITTER_TOKEN]
-BIRDEYE_API_KEY=[YOUR_BIRDEYE_KEY]
-```
-
-### Running the Bot
-```bash
-cd keeper-bot
-npm install
-npm run build
-
-# Development
-npm run dev
-
-# Production
-docker-compose up -d
-```
-
-## Security Considerations
-
-### Immutable Parameters
-- 5% tax rate hardcoded in transfer wrapper
-- Tax distribution split (1%/4%) hardcoded
-- Cannot be changed post-deployment
-
-### Program Security
-- Burn upgrade authority after mainnet deployment
-- All critical operations use PDAs
-- Keeper bot is only authorized tax collector
-- Tax exemptions require explicit authorization
-
-### Operational Security
-- Keeper bot private key in secure storage (AWS KMS/HashiCorp Vault)
-- API keys stored as environment variables
-- Transaction simulation before execution
-- Comprehensive error handling and retry logic
-
-## Testing
-
-### Unit Tests
-```bash
-# Test programs
-anchor test
-
-# Test keeper bot
-cd keeper-bot && npm test
-```
-
-### Integration Testing
-1. Deploy to devnet
-2. Create test token with transfer wrapper
-3. Execute test transfers
-4. Verify tax collection
-5. Test reward distribution
-
-## Monitoring
-
-### Health Endpoints
-- `http://localhost:3000/health` - Service health
-- `http://localhost:3001/metrics` - Prometheus metrics
-
-### Key Metrics
-- Tax collection volume
-- Reward distribution success rate
-- Holder registry size
-- API response times
-
-## Documentation
-
-- [Architecture Details](./ARCHITECTURE.md)
-- [Keeper Bot Architecture](./keeper-bot/ARCHITECTURE.md)
-- [Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)
-- [Operations Manual](./docs/OPERATIONS_MANUAL.md)
-
-## Future Enhancements
-
-### Phase 2
-- Multi-signature support for high-value operations
-- Advanced analytics dashboard
-- Automated holder communications
-- Cross-chain reward distribution
-
-### Phase 3
-- Machine learning for optimal distribution timing
-- Governance token integration
-- Decentralized keeper network
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-## License
-
-MIT License - see [LICENSE](./LICENSE) for details.
+- Solana CLI 2.0+
+- Rust 1.70+
+- Anchor 0.29.0
+- Node.js 18+
+- Twitter API access
+- Birdeye API key

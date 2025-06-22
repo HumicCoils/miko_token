@@ -1,12 +1,11 @@
 use anchor_lang::prelude::*;
 
-pub mod errors;
-pub mod instructions;
 pub mod state;
+pub mod instructions;
 
 use instructions::*;
 
-declare_id!("KNKv3pAEiA313iGTSWUZ9yLF5pPDSCpDKb3KLJ9ibPA");
+declare_id!("SDia1z3nQJGbcVMnEqFxGEUH5WMCWsUruKFMQkwvjLn");
 
 #[program]
 pub mod smart_dial {
@@ -14,32 +13,17 @@ pub mod smart_dial {
 
     pub fn initialize(
         ctx: Context<Initialize>,
-        keeper_bot_pubkey: Pubkey,
+        keeper_bot_wallet: Pubkey,
         treasury_wallet: Pubkey,
-        owner_wallet: Pubkey,
-        ai_agent_twitter_id: String,
     ) -> Result<()> {
-        instructions::initialize::handler(
-            ctx,
-            keeper_bot_pubkey,
-            treasury_wallet,
-            owner_wallet,
-            ai_agent_twitter_id,
-        )
+        instructions::initialize::handler(ctx, keeper_bot_wallet, treasury_wallet)
     }
 
-    pub fn update_reward_token_mint(
+    pub fn update_reward_token(
         ctx: Context<UpdateRewardToken>,
-        new_mint: Pubkey,
+        new_reward_token: Pubkey,
+        token_symbol: String,
     ) -> Result<()> {
-        instructions::update_reward_token::handler(ctx, new_mint)
-    }
-
-    pub fn update_wallets(
-        ctx: Context<UpdateWallets>,
-        new_treasury_wallet: Option<Pubkey>,
-        new_owner_wallet: Option<Pubkey>,
-    ) -> Result<()> {
-        instructions::update_wallets::handler(ctx, new_treasury_wallet, new_owner_wallet)
+        instructions::update_reward::handler(ctx, new_reward_token, token_symbol)
     }
 }

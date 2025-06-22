@@ -1,121 +1,55 @@
 use anchor_lang::prelude::*;
-use crate::{constants::*, errors::VaultError, state::{TaxConfig, HolderRegistry, HolderInfo, RewardExclusions}};
+use crate::{constants::*, errors::VaultError, state::{TaxConfig, HolderRegistry}};
 
 #[derive(Accounts)]
-#[instruction(chunk_id: u8)]
-pub struct UpdateHolders<'info> {
+pub struct UpdateHolderRegistry<'info> {
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub keeper_bot: Signer<'info>,
     
     #[account(
         seeds = [TAX_CONFIG_SEED],
         bump = tax_config.bump,
-        constraint = tax_config.initialized @ VaultError::NotInitialized
+        constraint = tax_config.keeper_bot_wallet == keeper_bot.key() @ VaultError::UnauthorizedAccess
     )]
     pub tax_config: Account<'info, TaxConfig>,
     
     #[account(
         init_if_needed,
-        payer = authority,
-        space = HolderRegistry::space(MAX_HOLDERS_PER_CHUNK),
-        seeds = [HOLDER_REGISTRY_SEED, &chunk_id.to_le_bytes()],
+        payer = keeper_bot,
+        space = HolderRegistry::LEN,
+        seeds = [HOLDER_REGISTRY_SEED],
         bump
     )]
     pub holder_registry: Account<'info, HolderRegistry>,
     
-    #[account(
-        seeds = [b"reward_exclusions"],
-        bump
-    )]
-    pub reward_exclusions: Option<Account<'info, RewardExclusions>>,
-    
     pub system_program: Program<'info, System>,
-    /// CHECK: Token-2022 program
-    pub token_2022_program: UncheckedAccount<'info>,
 }
 
 pub fn handler(
-    ctx: Context<UpdateHolders>,
-    chunk_id: u8,
-    start_index: u32,
-    batch_size: u32,
-    min_holder_threshold: u64,
+    ctx: Context<UpdateHolderRegistry>,
+    holders: Vec<Pubkey>,
+    balances: Vec<u64>,
 ) -> Result<()> {
-    let holder_registry = &mut ctx.accounts.holder_registry;
-    let clock = Clock::get()?;
-    
-    // Initialize if new
-    if holder_registry.chunk_id == 0 && holder_registry.eligible_holders.is_empty() {
-        holder_registry.chunk_id = chunk_id;
-        holder_registry.last_snapshot_slot = clock.slot;
-        holder_registry.total_eligible_balance = 0;
-        holder_registry.next_chunk = None;
-    }
-    
-    // Validate chunk_id
     require!(
-        holder_registry.chunk_id == chunk_id,
-        VaultError::InvalidChunkId
+        holders.len() == balances.len(),
+        VaultError::InvalidHolderData
     );
     
-    // Clear existing holders for this update
-    holder_registry.eligible_holders.clear();
-    holder_registry.total_eligible_balance = 0;
-    
-    // TODO: In production, this would iterate through token accounts
-    // For now, we'll simulate with placeholder logic
-    
-    // Update snapshot slot
-    holder_registry.last_snapshot_slot = clock.slot;
-    
-    msg!("Updated holder registry chunk {} with {} holders, total balance: {}", 
-        chunk_id, 
-        holder_registry.eligible_holders.len(),
-        holder_registry.total_eligible_balance
+    require!(
+        holders.len() <= MAX_HOLDERS_PER_REGISTRY,
+        VaultError::HolderRegistryFull
     );
+    
+    let registry = &mut ctx.accounts.holder_registry;
+    
+    // Update registry
+    registry.holders = holders;
+    registry.balances = balances;
+    registry.last_update = Clock::get()?.unix_timestamp;
+    registry.total_eligible = registry.balances.iter().sum();
+    
+    msg!("Updated holder registry with {} holders", registry.holders.len());
+    msg!("Total eligible balance: {}", registry.total_eligible);
     
     Ok(())
-}
-
-impl UpdateHolders<'_> {
-    pub fn add_holder(
-        holder_registry: &mut Account<HolderRegistry>,
-        address: Pubkey,
-        balance: u64,
-        min_holder_threshold: u64,
-        reward_exclusions: &Option<Account<RewardExclusions>>,
-    ) -> Result<()> {
-        // Check if holder meets threshold
-        if balance < min_holder_threshold {
-            return Ok(());
-        }
-        
-        // Check if holder is excluded from rewards
-        if let Some(exclusions) = reward_exclusions {
-            if exclusions.is_excluded(&address) {
-                return Ok(());
-            }
-        }
-        
-        // Check if registry is full
-        require!(
-            holder_registry.eligible_holders.len() < MAX_HOLDERS_PER_CHUNK,
-            VaultError::HolderRegistryChunkFull
-        );
-        
-        // Add holder
-        holder_registry.eligible_holders.push(HolderInfo {
-            address,
-            balance,
-            reward_share: 0, // Will be calculated during distribution
-        });
-        
-        // Update total balance
-        holder_registry.total_eligible_balance = holder_registry
-            .total_eligible_balance
-            .checked_add(balance)
-            .ok_or(VaultError::MathOverflow)?;
-        
-        Ok(())
-    }
 }

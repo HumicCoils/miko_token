@@ -1,37 +1,32 @@
 use anchor_lang::prelude::*;
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
+pub enum ExclusionType {
+    RewardExclusion,
+    TaxExemption,
+}
+
 #[account]
-pub struct RewardExclusions {
+pub struct ExclusionList {
     pub authority: Pubkey,
-    pub excluded_addresses: Vec<Pubkey>,
+    pub reward_exclusions: Vec<Pubkey>,
+    pub tax_exemptions: Vec<Pubkey>,
     pub bump: u8,
 }
 
-impl RewardExclusions {
+impl ExclusionList {
     pub const LEN: usize = 8 + // discriminator
         32 + // authority
-        4 + (32 * 200) + // vec with up to 200 addresses
-        1; // bump
+        4 + (32 * 200) + // reward_exclusions (max 200)
+        4 + (32 * 200) + // tax_exemptions (max 200)
+        1 + // bump
+        64; // padding
         
-    pub fn is_excluded(&self, address: &Pubkey) -> bool {
-        self.excluded_addresses.contains(address)
+    pub fn is_reward_excluded(&self, wallet: &Pubkey) -> bool {
+        self.reward_exclusions.contains(wallet)
     }
-}
-
-#[account]
-pub struct TaxExemptions {
-    pub authority: Pubkey,
-    pub exempt_addresses: Vec<Pubkey>,
-    pub bump: u8,
-}
-
-impl TaxExemptions {
-    pub const LEN: usize = 8 + // discriminator
-        32 + // authority
-        4 + (32 * 200) + // vec with up to 200 addresses
-        1; // bump
-        
-    pub fn is_exempt(&self, address: &Pubkey) -> bool {
-        self.exempt_addresses.contains(address)
+    
+    pub fn is_tax_exempt(&self, wallet: &Pubkey) -> bool {
+        self.tax_exemptions.contains(wallet)
     }
 }
