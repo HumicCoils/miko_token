@@ -16,8 +16,10 @@ pub mod absolute_vault {
     pub fn initialize(
         ctx: Context<Initialize>,
         smart_dial_program: Pubkey,
+        keeper_bot_wallet: Pubkey,
+        owner_wallet: Pubkey,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, smart_dial_program)
+        instructions::initialize::handler(ctx, smart_dial_program, keeper_bot_wallet, owner_wallet)
     }
 
     pub fn process_collected_taxes(
@@ -77,5 +79,17 @@ pub mod absolute_vault {
         address: Pubkey,
     ) -> Result<()> {
         instructions::manage_exclusions::remove_tax_exemption(ctx, address)
+    }
+
+    pub fn collect_and_distribute(
+        ctx: Context<CollectAndDistribute>,
+    ) -> Result<()> {
+        instructions::collect_and_distribute::handler(ctx)
+    }
+
+    pub fn check_exemption(
+        ctx: Context<CheckExemption>,
+    ) -> Result<ExemptionStatus> {
+        instructions::check_exemption::handler(ctx)
     }
 }

@@ -129,8 +129,13 @@ npx tsc scripts/test-tax-collection.ts --outDir dist --esModuleInterop --resolve
 # - Transfer 1M tokens from Holder 1 to Holder 2 (5% tax)
 # - Transfer 500K tokens from Holder 3 to Holder 1 (5% tax)
 # - Transfer 100K tokens from Treasury to Holder 1 (tax exempt)
-# - Verify tax collection and exemptions work correctly
+# - Show that fees are held as "withheld" amounts in Token-2022
+
+# IMPORTANT: To actually collect the taxes into the tax holding account:
+npx tsc scripts/process-collected-taxes.ts --outDir dist --esModuleInterop --resolveJsonModule --target es2020 --module commonjs && node dist/process-collected-taxes.js
 ```
+
+**Note**: Token-2022 transfer fees are not automatically moved to a holding account. They are held as "withheld" amounts in the token accounts and must be collected using the processCollectedTaxes instruction.
 
 ### 6. Test Reward Distribution Scenarios
 

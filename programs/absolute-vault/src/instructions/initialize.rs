@@ -40,6 +40,8 @@ pub struct Initialize<'info> {
 pub fn handler(
     ctx: Context<Initialize>,
     smart_dial_program: Pubkey,
+    keeper_bot_wallet: Pubkey,
+    owner_wallet: Pubkey,
 ) -> Result<()> {
     let tax_config = &mut ctx.accounts.tax_config;
     
@@ -50,11 +52,15 @@ pub fn handler(
     tax_config.tax_holding_pda = ctx.accounts.tax_holding_pda.key();
     tax_config.smart_dial_program = smart_dial_program;
     tax_config.token_mint = ctx.accounts.token_mint.key();
+    tax_config.keeper_bot_wallet = keeper_bot_wallet;
+    tax_config.owner_wallet = owner_wallet;
     tax_config.initialized = true;
     tax_config.bump = ctx.bumps.tax_config;
     
     msg!("Absolute Vault initialized with tax rate: {}%", TAX_RATE);
-    msg!("All tax will be sent to treasury for swapping and distribution");
+    msg!("Owner wallet: {} (receives 1%)", owner_wallet);
+    msg!("Treasury receives 4% for swapping and distribution");
+    msg!("Keeper bot wallet: {}", keeper_bot_wallet);
     
     Ok(())
 }
