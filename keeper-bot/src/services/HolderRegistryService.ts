@@ -36,23 +36,87 @@ export class HolderRegistryService {
   }
 
   /**
+   * Update holder registry with current eligible holders
+   */
+  async updateHolderRegistry(): Promise<void> {
+    try {
+      logger.info('Updating holder registry...');
+      
+      // Get all MIKO holders
+      const allHolders = await this.fetchAllHolders();
+      
+      // Get current MIKO price
+      const mikoPrice = await this.birdeyeClient.getTokenPrice(config.MIKO_TOKEN_MINT);
+      
+      // Filter eligible holders ($100+ USD value)
+      const eligibleHolders = allHolders.filter(holder => {
+        holder.usdValue = (holder.balance / 1e9) * mikoPrice;
+        return holder.usdValue >= config.HOLDER_VALUE_THRESHOLD && 
+               !this.isExcludedWallet(holder.address);
+      });
+
+      logger.info(`Found ${eligibleHolders.length} eligible holders out of ${allHolders.length} total`);
+
+      // Update on-chain registry
+      await this.updateOnChainRegistry(eligibleHolders);
+    } catch (error) {
+      logger.error('Failed to update holder registry:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current eligible holders from registry
+   */
+  async getEligibleHolders(): Promise<Holder[]> {
+    try {
+      const holders: Holder[] = [];
+      let chunkId = 0;
+      
+      while (true) {
+        try {
+          const [registryPda] = await PublicKey.findProgramAddress(
+            [Buffer.from('holder_registry'), Buffer.from([chunkId])],
+            this.absoluteVaultProgram.programId
+          );
+          
+          const registry = await this.absoluteVaultProgram.account.holderRegistry.fetch(registryPda);
+          
+          for (let i = 0; i < registry.count; i++) {
+            holders.push({
+              address: registry.holders[i],
+              balance: registry.balances[i].toNumber(),
+              usdValue: 0, // Will be calculated if needed
+            });
+          }
+          
+          chunkId++;
+        } catch {
+          // No more chunks
+          break;
+        }
+      }
+      
+      return holders;
+    } catch (error) {
+      logger.error('Failed to get eligible holders:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Fetch all MIKO token holders
    */
-  async fetchAllHolders(): Promise<Holder[]> {
+  private async fetchAllHolders(): Promise<Holder[]> {
     try {
-      logger.info('Fetching all MIKO token holders...');
-      
-      // Get all token accounts for MIKO
       const tokenAccounts = await this.connection.getProgramAccounts(
         TOKEN_PROGRAM_ID,
         {
           filters: [
-            {
-              dataSize: 165, // Token account size
-            },
+            { dataSize: 165 },
             {
               memcmp: {
-                offset: 0, // Mint address offset
+                offset: 0,
                 bytes: config.MIKO_TOKEN_MINT,
               },
             },
@@ -60,30 +124,24 @@ export class HolderRegistryService {
         }
       );
 
-      // Get MIKO price from Birdeye
-      const mikoPrice = await this.birdeyeClient.getTokenPrice(config.MIKO_TOKEN_MINT);
-      
       const holders: Holder[] = [];
       
       for (const account of tokenAccounts) {
         const data = await this.connection.getAccountInfo(account.pubkey);
         if (!data) continue;
 
-        // Parse token account data
         const balance = this.parseTokenAccountBalance(data.data);
         if (balance === 0) continue;
 
         const owner = new PublicKey(data.data.slice(32, 64));
-        const usdValue = (balance / 1e9) * mikoPrice; // Convert from lamports
-
+        
         holders.push({
           address: owner,
           balance: balance,
-          usdValue: usdValue,
+          usdValue: 0, // Calculated later
         });
       }
 
-      logger.info(`Found ${holders.length} MIKO holders`);
       return holders.sort((a, b) => b.balance - a.balance);
     } catch (error) {
       logger.error('Failed to fetch holders:', error);
@@ -92,88 +150,81 @@ export class HolderRegistryService {
   }
 
   /**
-   * Calculate USD value of holder's MIKO balance
+   * Check if wallet is excluded (exchange, program, etc.)
    */
-  async calculateHolderValue(holder: Holder): Promise<number> {
+  private async isExcludedWallet(address: PublicKey): Promise<boolean> {
     try {
-      const mikoPrice = await this.birdeyeClient.getTokenPrice(config.MIKO_TOKEN_MINT);
-      return (holder.balance / 1e9) * mikoPrice;
-    } catch (error) {
-      logger.error('Failed to calculate holder value:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Update holder registry on-chain
-   */
-  async updateHolderRegistry(eligibleHolders: Holder[]): Promise<void> {
-    try {
-      logger.info(`Updating holder registry with ${eligibleHolders.length} eligible holders`);
-
-      // Filter holders above threshold and not excluded
-      const qualifiedHolders = eligibleHolders.filter(holder => 
-        holder.usdValue >= config.HOLDER_VALUE_THRESHOLD &&
-        !this.isExcludedWallet(holder.address)
+      // Check on-chain exclusion list
+      const [exclusionPda] = await PublicKey.findProgramAddress(
+        [Buffer.from('exclusions')],
+        this.absoluteVaultProgram.programId
       );
 
-      // Split into chunks (max 100 per account)
-      const chunks = this.chunkArray(qualifiedHolders, 100);
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const holders = chunk.map(h => h.address);
-        const balances = chunk.map(h => h.balance);
-
-        const tx = await this.absoluteVaultProgram.methods
-          .updateHolderRegistry(
-            i,                    // chunk_id
-            i * 100,             // start_index
-            chunk.length,        // batch_size
-            BigInt(config.HOLDER_VALUE_THRESHOLD * 1e9) // min_holder_threshold in lamports
-          )
-          .accounts({
-            authority: this.keeperWallet.publicKey,
-            taxConfig: await this.getTaxConfigPda(),
-            holderRegistry: await this.getHolderRegistryPda(i),
-            systemProgram: PublicKey.default,
-          })
-          .rpc();
-
-        logger.info(`Updated holder registry chunk ${i}: ${tx}`);
+      const exclusions = await this.absoluteVaultProgram.account.rewardExclusions.fetch(exclusionPda);
+      
+      if (exclusions.excludedAddresses.some(addr => addr.equals(address))) {
+        return true;
       }
 
-      logger.info('Holder registry update complete');
+      // Check if it's a program account
+      const accountInfo = await this.connection.getAccountInfo(address);
+      if (accountInfo && accountInfo.executable) {
+        return true;
+      }
+
+      // Check against hardcoded exclusion list
+      const knownExclusions = [
+        config.TREASURY_WALLET,
+        config.ABSOLUTE_VAULT_PROGRAM,
+        config.SMART_DIAL_PROGRAM,
+        config.MIKO_TRANSFER_PROGRAM,
+        // Add known exchange wallets here
+      ];
+
+      return knownExclusions.some(excluded => 
+        new PublicKey(excluded).equals(address)
+      );
     } catch (error) {
-      logger.error('Failed to update holder registry:', error);
-      throw error;
+      logger.warn(`Error checking exclusion for ${address.toBase58()}:`, error);
+      return false;
     }
   }
 
   /**
-   * Check if a wallet is excluded (exchange, contract, etc.)
+   * Update on-chain holder registry
    */
-  isExcludedWallet(address: PublicKey): boolean {
-    // Check against exclusion list
-    const excludedAddresses = [
-      // Known exchange wallets
-      '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM', // Example exchange
-      // Add more excluded addresses
-    ];
+  private async updateOnChainRegistry(holders: Holder[]): Promise<void> {
+    const chunks = this.chunkArray(holders, 100);
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      
+      const tx = await this.absoluteVaultProgram.methods
+        .updateHolderRegistry(
+          i,
+          i * 100,
+          chunk.length,
+          BigInt(config.HOLDER_VALUE_THRESHOLD * 1e9)
+        )
+        .accounts({
+          authority: this.keeperWallet.publicKey,
+          // ... other accounts
+        })
+        .rpc();
 
-    return excludedAddresses.includes(address.toBase58());
+      logger.info(`Updated registry chunk ${i}: ${tx}`);
+    }
   }
 
   /**
-   * Helper: Parse token account balance from raw data
+   * Parse token account balance
    */
   private parseTokenAccountBalance(data: Buffer): number {
-    // Token amount is stored at offset 64
     return Number(data.readBigUInt64LE(64));
   }
 
   /**
-   * Helper: Chunk array into smaller arrays
+   * Chunk array helper
    */
   private chunkArray<T>(array: T[], size: number): T[][] {
     const chunks: T[][] = [];
@@ -181,27 +232,5 @@ export class HolderRegistryService {
       chunks.push(array.slice(i, i + size));
     }
     return chunks;
-  }
-
-  /**
-   * Helper: Get tax config PDA
-   */
-  private async getTaxConfigPda(): Promise<PublicKey> {
-    const [pda] = await PublicKey.findProgramAddress(
-      [Buffer.from('tax_config')],
-      this.absoluteVaultProgram.programId
-    );
-    return pda;
-  }
-
-  /**
-   * Helper: Get holder registry PDA for chunk
-   */
-  private async getHolderRegistryPda(chunkId: number): Promise<PublicKey> {
-    const [pda] = await PublicKey.findProgramAddress(
-      [Buffer.from('holder_registry'), Buffer.from([chunkId])],
-      this.absoluteVaultProgram.programId
-    );
-    return pda;
   }
 }

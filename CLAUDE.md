@@ -8,7 +8,7 @@ MIKO Token Backend System - A Solana blockchain project implementing a tax and r
 
 ### Architecture Components
 - **Absolute Vault Program**: Manages 5% tax collection and distribution (1% to owner, 4% to holders)
-- **Smart Dial Program**: Dynamically updates reward tokens based on AI agent (@mikolovescrypto) tweets
+- **Smart Dial Program**: Dynamically updates reward tokens based on AI agent (@project_miko) tweets
 - **Keeper Bot**: TypeScript service that monitors AI agent and orchestrates reward distributions
 
 ## Common Development Commands

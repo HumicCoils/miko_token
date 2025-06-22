@@ -7,10 +7,10 @@ The Keeper Bot is a TypeScript service that orchestrates the automated tax colle
 ## Core Components
 
 ### 1. AI Agent Monitor Service
-**Purpose**: Monitor @miko_project Twitter account for reward token selections
+**Purpose**: Monitor @project_miko Twitter account for reward token selections
 
 **Responsibilities**:
-- Poll Twitter API for new tweets from @miko_project
+- Poll Twitter API for new tweets from @project_miko
 - Parse tweets to identify new reward token mentions
 - Validate token addresses using Birdeye API
 - Schedule reward distribution for next Monday 12:00 UTC

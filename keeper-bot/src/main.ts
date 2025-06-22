@@ -1,89 +1,100 @@
+import { Connection, Keypair } from '@solana/web3.js';
+import { Program } from '@project-serum/anchor';
 import { config, validateConfig } from './config';
-import { createLogger } from './utils/logger';
-import { RewardScheduler } from './orchestration/RewardScheduler';
-import { HealthCheck } from './monitoring/HealthCheck';
-import { MetricsCollector } from './monitoring/MetricsCollector';
-
-const logger = createLogger('main');
-
-// Global error handlers
-process.on('uncaughtException', (error) => {
-    logger.error({ error }, 'Uncaught exception');
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error({ reason, promise }, 'Unhandled rejection');
-    process.exit(1);
-});
-
-// Graceful shutdown
-let scheduler: RewardScheduler | null = null;
-
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
-
-async function gracefulShutdown() {
-    logger.info('Received shutdown signal, starting graceful shutdown');
-    
-    if (scheduler) {
-        scheduler.stop();
-    }
-    
-    // Give some time for pending operations
-    setTimeout(() => {
-        logger.info('Shutdown complete');
-        process.exit(0);
-    }, 5000);
-}
+import { logger } from './utils/logger';
+import { AIAgentMonitor } from './services/AIAgentMonitor';
+import { TaxSwapDistributor } from './services/TaxSwapDistributor';
+import { HolderRegistryService } from './services/HolderRegistryService';
+import { SmartDialService } from './services/SmartDialService';
+import { WalletExclusionService } from './services/WalletExclusionService';
+import { BirdeyeClient } from './clients/BirdeyeClient';
+import { JupiterClient } from './clients/JupiterClient';
+import { HealthMonitor } from './monitoring/HealthMonitor';
+import { loadPrograms } from './utils/programLoader';
 
 async function main() {
-    try {
-        logger.info('Starting MIKO Keeper Bot');
-        
-        // Validate configuration
-        validateConfig();
-        logger.info('Configuration validated successfully');
-        
-        // Initialize metrics collector
-        const metricsCollector = new MetricsCollector();
-        logger.info('Metrics collector initialized');
-        
-        // Initialize reward scheduler
-        scheduler = new RewardScheduler();
-        logger.info('Reward scheduler initialized');
-        
-        // Initialize health check server
-        const healthCheck = new HealthCheck(scheduler);
-        await healthCheck.start();
-        logger.info('Health check server started');
-        
-        // Start the scheduler
-        scheduler.start();
-        
-        logger.info({
-            nodeEnv: config.NODE_ENV,
-            rpcUrl: config.RPC_URL,
-            healthCheckPort: config.HEALTH_CHECK_PORT,
-            metricsPort: config.METRICS_PORT,
-            rewardCheckInterval: `${config.REWARD_CHECK_INTERVAL_MS / 60000} minutes`,
-            distributionInterval: `${config.REWARD_DISTRIBUTION_INTERVAL_MS / 60000} minutes`,
-        }, 'MIKO Keeper Bot started successfully');
-        
-        // Log metrics periodically
-        setInterval(() => {
-            const metrics = metricsCollector.getSummary();
-            logger.info({ metrics }, 'Current metrics');
-        }, 300000); // Every 5 minutes
-        
-    } catch (error) {
-        logger.error({ error }, 'Failed to start keeper bot');
-        process.exit(1);
-    }
+  try {
+    logger.info('Starting MIKO Token Keeper Bot...');
+    
+    // Validate configuration
+    validateConfig();
+    
+    // Initialize connection
+    const connection = new Connection(config.SOLANA_RPC_URL, {
+      commitment: config.COMMITMENT_LEVEL,
+      wsEndpoint: config.SOLANA_WS_URL,
+    });
+    
+    // Load keeper wallet
+    const keeperWallet = Keypair.fromSecretKey(
+      Buffer.from(config.KEEPER_BOT_PRIVATE_KEY, 'base64')
+    );
+    logger.info(`Keeper bot wallet: ${keeperWallet.publicKey.toBase58()}`);
+    
+    // Load programs
+    const { absoluteVault, smartDial } = await loadPrograms(connection, keeperWallet);
+    
+    // Initialize clients
+    const birdeyeClient = new BirdeyeClient();
+    const jupiterClient = new JupiterClient(connection);
+    
+    // Initialize services
+    const smartDialService = new SmartDialService(connection, keeperWallet, smartDial);
+    const holderRegistryService = new HolderRegistryService(
+      connection,
+      keeperWallet,
+      absoluteVault,
+      birdeyeClient
+    );
+    
+    const aiAgentMonitor = new AIAgentMonitor(birdeyeClient, smartDialService);
+    const taxSwapDistributor = new TaxSwapDistributor(
+      connection,
+      keeperWallet,
+      absoluteVault,
+      jupiterClient,
+      smartDialService,
+      holderRegistryService
+    );
+    
+    const walletExclusionService = new WalletExclusionService(
+      connection,
+      keeperWallet,
+      absoluteVault
+    );
+    
+    // Initialize health monitoring
+    const healthMonitor = new HealthMonitor(config.HEALTH_CHECK_PORT);
+    await healthMonitor.start();
+    
+    // Initialize default exclusions
+    logger.info('Initializing default wallet exclusions...');
+    await walletExclusionService.initializeDefaultExclusions();
+    
+    // Start services
+    logger.info('Starting AI agent monitor...');
+    await aiAgentMonitor.startMonitoring();
+    
+    logger.info('Starting continuous tax swap and distribution...');
+    await taxSwapDistributor.startContinuousDistribution();
+    
+    logger.info('MIKO Token Keeper Bot is running!');
+    logger.info('- AI Agent monitoring: Every Monday at 03:00 UTC');
+    logger.info('- Tax distribution: Every 5 minutes');
+    logger.info(`- Health check: http://localhost:${config.HEALTH_CHECK_PORT}/health`);
+    
+    // Keep the process running
+    process.on('SIGINT', async () => {
+      logger.info('Shutting down keeper bot...');
+      await healthMonitor.stop();
+      process.exit(0);
+    });
+    
+  } catch (error) {
+    logger.error('Fatal error starting keeper bot:', error);
+    process.exit(1);
+  }
 }
 
-// Start the application
-main().catch((error) => {
-    logger.error({ error }, 'Fatal error in main');
-    process.exit(1);
-});
+// Run the keeper bot
+main();

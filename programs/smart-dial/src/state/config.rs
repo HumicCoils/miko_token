@@ -6,7 +6,7 @@ pub struct SmartDialConfig {
     pub keeper_bot_pubkey: Pubkey,
     pub treasury_wallet: Pubkey,
     pub owner_wallet: Pubkey,
-    pub ai_agent_twitter_id: String,  // @mikolovescrypto
+    pub ai_agent_twitter_id: String,  // @project_miko
     pub admin: Pubkey,                 // For emergency updates
     pub initialized: bool,
     pub bump: u8,

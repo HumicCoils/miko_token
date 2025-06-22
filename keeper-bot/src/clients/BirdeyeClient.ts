@@ -11,6 +11,21 @@ interface TokenPriceResponse {
   success: boolean;
 }
 
+interface TokenSearchResponse {
+  data: {
+    tokens: Array<{
+      address: string;
+      symbol: string;
+      name: string;
+      decimals: number;
+      logoURI: string;
+      volume24h: number;
+      liquidity: number;
+    }>;
+  };
+  success: boolean;
+}
+
 interface TokenInfoResponse {
   data: {
     address: string;
@@ -19,6 +34,7 @@ interface TokenInfoResponse {
     decimals: number;
     liquidity: number;
     volume24h: number;
+    priceUsd: number;
   };
   success: boolean;
 }
@@ -34,29 +50,6 @@ export class BirdeyeClient {
       },
       timeout: 30000,
     });
-
-    // Add request/response interceptors for logging
-    this.client.interceptors.request.use(
-      (config) => {
-        logger.debug(`Birdeye API Request: ${config.method?.toUpperCase()} ${config.url}`);
-        return config;
-      },
-      (error) => {
-        logger.error('Birdeye API Request Error:', error);
-        return Promise.reject(error);
-      }
-    );
-
-    this.client.interceptors.response.use(
-      (response) => {
-        logger.debug(`Birdeye API Response: ${response.status} ${response.config.url}`);
-        return response;
-      },
-      (error) => {
-        logger.error('Birdeye API Response Error:', error);
-        return Promise.reject(error);
-      }
-    );
   }
 
   /**
@@ -82,7 +75,38 @@ export class BirdeyeClient {
   }
 
   /**
-   * Get token information including liquidity and volume
+   * Search tokens by symbol
+   */
+  async searchTokenBySymbol(symbol: string): Promise<Array<{address: string, volume24h: number}>> {
+    try {
+      const response = await this.client.get<TokenSearchResponse>('/defi/search', {
+        params: {
+          query: symbol,
+          chain: 'solana',
+        },
+      });
+
+      if (!response.data.success) {
+        throw new Error(`Failed to search for symbol ${symbol}`);
+      }
+
+      // Filter tokens that match the exact symbol (case-insensitive)
+      const matchingTokens = response.data.data.tokens
+        .filter(token => token.symbol.toUpperCase() === symbol.toUpperCase())
+        .map(token => ({
+          address: token.address,
+          volume24h: token.volume24h,
+        }));
+
+      return matchingTokens;
+    } catch (error) {
+      logger.error(`Failed to search for symbol ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get detailed token information
    */
   async getTokenInfo(tokenAddress: string): Promise<TokenInfoResponse['data']> {
     try {
@@ -135,37 +159,5 @@ export class BirdeyeClient {
       logger.error(`Failed to validate token ${tokenAddress}:`, error);
       return false;
     }
-  }
-
-  /**
-   * Get multiple token prices in batch
-   */
-  async getMultipleTokenPrices(tokenAddresses: string[]): Promise<Map<string, number>> {
-    const prices = new Map<string, number>();
-    
-    // Birdeye API has rate limits, so process in batches
-    const batchSize = 10;
-    for (let i = 0; i < tokenAddresses.length; i += batchSize) {
-      const batch = tokenAddresses.slice(i, i + batchSize);
-      
-      await Promise.all(
-        batch.map(async (address) => {
-          try {
-            const price = await this.getTokenPrice(address);
-            prices.set(address, price);
-          } catch (error) {
-            logger.error(`Failed to get price for ${address}:`, error);
-            prices.set(address, 0);
-          }
-        })
-      );
-      
-      // Rate limit: wait 100ms between batches
-      if (i + batchSize < tokenAddresses.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    
-    return prices;
   }
 }

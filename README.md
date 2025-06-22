@@ -16,7 +16,7 @@ MIKO Token implements a 5% tax on all transfers with intelligent distribution:
 
 ### Key Features
 - **Automated Tax Collection**: Custom transfer wrapper ensures tax is always collected
-- **AI-Driven Rewards**: @miko_project tweets determine weekly reward tokens
+- **AI-Driven Rewards**: @project_miko tweets determine weekly reward tokens
 - **Dynamic Eligibility**: Holders need $100+ USD worth of MIKO to receive rewards
 - **Fully Automated**: Keeper bot handles all operations without manual intervention
 
@@ -42,7 +42,7 @@ MIKO Token implements a 5% tax on all transfers with intelligent distribution:
 - Maintains treasury and owner wallet addresses
 
 ### 4. Keeper Bot (TypeScript)
-- **AI Monitor**: Watches @miko_project tweets for token mentions
+- **AI Monitor**: Watches @project_miko tweets for token mentions
 - **Tax Collector**: Triggers periodic tax collection and distribution
 - **Registry Updater**: Maintains holder eligibility based on USD value
 - **Reward Distributor**: Swaps treasury funds and distributes to holders

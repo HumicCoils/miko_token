@@ -47,7 +47,7 @@ Stores the current reward token based on AI agent tweets.
 Automated service that orchestrates the entire system.
 
 **Responsibilities:**
-- Monitor @miko_project tweets every Monday
+- Monitor @project_miko tweets every Monday
 - Extract token symbol and query Birdeye API
 - Update reward token in Smart Dial
 - Monitor tax accumulation and trigger distribution
