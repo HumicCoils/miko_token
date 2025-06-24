@@ -1,29 +1,68 @@
-# MIKO Token Test Version
+# MIKO Token Testing Guide
 
-This folder contains the modified test version for devnet testing.
+This folder contains a simplified test version for devnet testing. The test version removes external dependencies and allows immediate testing of all features.
 
-## Modifications
+## Key Differences
 
-1. **No Token Swaps**: Distributes MIKO directly instead of swapping to reward tokens
-2. **Simple Eligibility**: 100,000 MIKO minimum instead of $100 USD value
-3. **No Birdeye Integration**: Simplified reward token selection
-4. **Mock Twitter**: Uses mock tweets for testing
+| Feature | Production | Test Version |
+|---------|------------|--------------|
+| Reward Token | Real @project_miko tweets | Mock (returns BONK) |
+| Token Swaps | Jupiter aggregator | Direct MIKO distribution |
+| Eligibility | $100+ USD worth | 100,000+ MIKO tokens |
+| Schedule | Monday 03:00 UTC | Immediate on startup |
 
-## Structure
+## Quick Start
 
+```bash
+# Setup
+npm install
+cp .env.test.example .env.test
+# Edit .env.test with your program IDs and wallets
+
+# Run all tests
+./scripts/run-all-tests.sh
+
+# Or run individually:
+npm run init                  # Initialize programs
+npm run create-token         # Create MIKO token  
+npm run mint-tokens          # Distribute to test wallets
+npm run generate-transactions # Generate test transfers
+npm run keeper-bot           # Start keeper bot
+npm run monitor             # Monitor results
 ```
-test/
-├── keeper-bot/          # Test version of keeper bot
-│   └── src/
-│       └── services/    # Modified services for testing
-├── scripts/            # Test scripts
-└── config/            # Test configurations
+
+## Testing Both Versions
+
+### Production Version
+Use the main project directory with real API keys:
+- Twitter API for @project_miko monitoring
+- Birdeye API for price data
+- Full token swap functionality
+
+### Test Version  
+This simplified version for rapid testing:
+- No external APIs needed
+- Fixed 100k MIKO threshold
+- Mock tweets return immediately
+- Direct MIKO distribution
+
+## Verification
+
+Monitor test results:
+```bash
+# Check balances
+spl-token balance --owner <WALLET> --url devnet
+
+# View program logs
+solana logs <PROGRAM_ID> -u devnet
+
+# Health check
+curl http://localhost:3000/health
 ```
 
-## Usage
-
-1. Copy test files over production files for devnet testing
-2. Run with test configuration
-3. Revert to production files after testing
-
-See `/DEVNET_TESTING_GUIDE.md` for detailed instructions.
+Expected results:
+- ✅ 5% transfer fee collected
+- ✅ Fees split: 1% owner, 4% treasury
+- ✅ Only 100k+ MIKO holders eligible
+- ✅ Excluded wallets ignored
+- ✅ Distribution every 5 minutes
