@@ -1,6 +1,6 @@
 import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import { Program } from '@coral-xyz/anchor';
-import { getAssociatedTokenAddress } from '@solana/spl-token';
+import { getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import * as cron from 'node-cron';
 import { logger } from '../../../../keeper-bot/src/utils/logger';
 

@@ -1,0 +1,38 @@
+# Test version Dockerfile for MIKO Keeper Bot
+FROM node:18-alpine
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++ git
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy test source code
+COPY keeper-bot/ ./keeper-bot/
+COPY scripts/ ./scripts/
+COPY .env.test ./
+
+# Copy parent keeper-bot utils (needed by test services)
+COPY ../keeper-bot/src/utils ./keeper-bot-utils/
+
+# Build TypeScript
+RUN npm install typescript @types/node
+RUN npx tsc
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001
+USER nodejs
+
+# Expose health check port
+EXPOSE 3000
+
+# Run test keeper bot
+CMD ["node", "dist/keeper-bot/src/index.test.js"]
