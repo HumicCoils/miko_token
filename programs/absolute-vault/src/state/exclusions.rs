@@ -17,8 +17,8 @@ pub struct ExclusionList {
 impl ExclusionList {
     pub const LEN: usize = 8 + // discriminator
         32 + // authority
-        4 + (32 * 200) + // reward_exclusions (max 200)
-        4 + (32 * 200) + // tax_exemptions (max 200)
+        4 + (32 * 50) + // reward_exclusions (max 50)
+        4 + (32 * 50) + // tax_exemptions (max 50)
         1 + // bump
         64; // padding
         

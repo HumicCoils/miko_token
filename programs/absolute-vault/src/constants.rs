@@ -9,4 +9,4 @@ pub const TAX_RATE_BASIS_POINTS: u16 = 500; // 5% = 500 basis points
 pub const OWNER_SHARE_BASIS_POINTS: u16 = 100; // 1% = 20% of tax
 pub const TREASURY_SHARE_BASIS_POINTS: u16 = 400; // 4% = 80% of tax
 
-pub const MAX_HOLDERS_PER_REGISTRY: usize = 500;
+pub const MAX_HOLDERS_PER_REGISTRY: usize = 50;

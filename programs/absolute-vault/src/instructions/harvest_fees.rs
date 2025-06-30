@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_2022::{self, Token2022, TransferChecked};
-use anchor_spl::token::TokenAccount;
+use anchor_spl::token::{TokenAccount};
+use anchor_spl::associated_token::AssociatedToken;
 use spl_token_2022::{
     extension::transfer_fee,
 };
@@ -26,13 +27,13 @@ pub struct HarvestAndCollectFees<'info> {
     )]
     pub miko_token_mint: UncheckedAccount<'info>,
     
-    #[account(
-        mut,
-        associated_token::mint = tax_config.miko_token_mint,
-        associated_token::authority = tax_config.owner_wallet,
-        associated_token::token_program = token_2022_program,
-    )]
-    pub owner_token_account: Account<'info, TokenAccount>,
+    /// Owner's MIKO token account (created if needed)
+    /// CHECK: Validated as token account in handler
+    #[account(mut)]
+    pub owner_token_account: UncheckedAccount<'info>,
+    
+    /// CHECK: Owner wallet from tax config
+    pub owner_wallet: UncheckedAccount<'info>,
     
     #[account(
         mut,
@@ -61,9 +62,56 @@ pub struct HarvestAndCollectFees<'info> {
     pub withdraw_authority: UncheckedAccount<'info>,
     
     pub token_2022_program: Program<'info, Token2022>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<HarvestAndCollectFees>, source_accounts: Vec<Pubkey>) -> Result<()> {
+    // Validate owner wallet matches tax config
+    require_eq!(
+        ctx.accounts.owner_wallet.key(),
+        ctx.accounts.tax_config.owner_wallet,
+        VaultError::UnauthorizedAccess
+    );
+    
+    // Create owner token account if it doesn't exist
+    let owner_ata = anchor_spl::associated_token::get_associated_token_address_with_program_id(
+        &ctx.accounts.tax_config.owner_wallet,
+        &ctx.accounts.tax_config.miko_token_mint,
+        &ctx.accounts.token_2022_program.key(),
+    );
+    
+    // Verify the provided account is the correct ATA
+    require_eq!(
+        ctx.accounts.owner_token_account.key(),
+        owner_ata,
+        VaultError::InvalidTokenAccount
+    );
+    
+    // If account doesn't exist, create it
+    if ctx.accounts.owner_token_account.data_is_empty() {
+        let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
+            &ctx.accounts.keeper_bot.key(),
+            &ctx.accounts.tax_config.owner_wallet,
+            &ctx.accounts.tax_config.miko_token_mint,
+            &ctx.accounts.token_2022_program.key(),
+        );
+        
+        msg!("Creating owner token account");
+        anchor_lang::solana_program::program::invoke(
+            &create_ata_ix,
+            &[
+                ctx.accounts.keeper_bot.to_account_info(),
+                ctx.accounts.owner_token_account.to_account_info(),
+                ctx.accounts.owner_wallet.to_account_info(),
+                ctx.accounts.miko_token_mint.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+                ctx.accounts.token_2022_program.to_account_info(),
+                ctx.accounts.associated_token_program.to_account_info(),
+            ],
+        )?;
+    }
+    
     // Step 1: Harvest withheld fees from source accounts to mint
     if !source_accounts.is_empty() {
         let source_account_refs: Vec<&Pubkey> = source_accounts.iter().collect();

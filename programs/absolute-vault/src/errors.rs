@@ -34,4 +34,7 @@ pub enum VaultError {
     
     #[msg("Not implemented")]
     NotImplemented,
+    
+    #[msg("Invalid token account")]
+    InvalidTokenAccount,
 }
