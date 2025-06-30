@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::state::DialConfig;
+use crate::{state::DialConfig, errors::DialError};
 
 #[derive(Accounts)]
 pub struct UpdateRewardToken<'info> {
@@ -22,7 +22,7 @@ pub fn handler(
 ) -> Result<()> {
     let config = &mut ctx.accounts.dial_config;
     
-    require!(token_symbol.len() <= 32, ErrorCode::InvalidStringLength);
+    require!(token_symbol.len() <= 32, DialError::InvalidTokenSymbol);
     
     config.current_reward_token = new_reward_token;
     config.current_token_symbol = token_symbol.clone();

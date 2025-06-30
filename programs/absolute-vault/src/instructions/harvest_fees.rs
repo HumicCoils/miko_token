@@ -1,6 +1,9 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_2022::{self, Token2022};
-use anchor_spl::token::{Token, TokenAccount, Mint};
+use anchor_spl::token_2022::{self, Token2022, TransferChecked};
+use anchor_spl::token::TokenAccount;
+use spl_token_2022::{
+    extension::transfer_fee,
+};
 use crate::{constants::*, errors::VaultError, state::TaxConfig};
 
 #[derive(Accounts)]
@@ -27,6 +30,7 @@ pub struct HarvestAndCollectFees<'info> {
         mut,
         associated_token::mint = tax_config.miko_token_mint,
         associated_token::authority = tax_config.owner_wallet,
+        associated_token::token_program = token_2022_program,
     )]
     pub owner_token_account: Account<'info, TokenAccount>,
     
@@ -34,15 +38,20 @@ pub struct HarvestAndCollectFees<'info> {
         mut,
         associated_token::mint = tax_config.miko_token_mint,
         associated_token::authority = tax_config.treasury_wallet,
+        associated_token::token_program = token_2022_program,
     )]
     pub treasury_token_account: Account<'info, TokenAccount>,
     
-    /// CHECK: Fee authority PDA
+    /// Vault PDA that receives fees before distribution
     #[account(
-        seeds = [FEE_AUTHORITY_SEED],
-        bump
+        mut,
+        seeds = [VAULT_SEED, tax_config.miko_token_mint.as_ref()],
+        bump,
+        token::mint = tax_config.miko_token_mint,
+        token::authority = vault_account,
+        token::token_program = token_2022_program,
     )]
-    pub fee_authority: UncheckedAccount<'info>,
+    pub vault_account: Account<'info, TokenAccount>,
     
     /// CHECK: Withdraw authority PDA
     #[account(
@@ -56,105 +65,106 @@ pub struct HarvestAndCollectFees<'info> {
 
 pub fn handler(ctx: Context<HarvestAndCollectFees>, source_accounts: Vec<Pubkey>) -> Result<()> {
     // Step 1: Harvest withheld fees from source accounts to mint
-    let fee_seeds = &[FEE_AUTHORITY_SEED, &[ctx.bumps.fee_authority]];
-    let fee_signer = &[&fee_seeds[..]];
-    
     if !source_accounts.is_empty() {
-        let harvest_ix = spl_token_2022::instruction::harvest_withheld_tokens_to_mint(
+        let source_account_refs: Vec<&Pubkey> = source_accounts.iter().collect();
+        let harvest_ix = transfer_fee::instruction::harvest_withheld_tokens_to_mint(
             &ctx.accounts.token_2022_program.key(),
             &ctx.accounts.miko_token_mint.key(),
-            &source_accounts,
+            &source_account_refs,
         )?;
         
-        anchor_lang::solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke(
             &harvest_ix,
             &[
                 ctx.accounts.miko_token_mint.to_account_info(),
-                ctx.accounts.fee_authority.to_account_info(),
             ],
-            fee_signer,
         )?;
         
         msg!("Harvested fees from {} accounts", source_accounts.len());
     }
     
-    // Step 2: Get total withheld amount from mint
-    let mint_info = ctx.accounts.miko_token_mint.to_account_info();
-    let mint_data = mint_info.data.borrow();
+    // Step 2: Withdraw all fees from mint to vault PDA
+    let withdraw_seeds = &[WITHDRAW_AUTHORITY_SEED, &[ctx.bumps.withdraw_authority]];
+    let withdraw_signer = &[&withdraw_seeds[..]];
     
-    // Parse mint to get withheld amount
-    // This is a simplified version - in production you'd properly deserialize the mint
-    let withheld_amount = u64::from_le_bytes(
-        mint_data[mint_data.len() - 8..].try_into().unwrap_or([0; 8])
-    );
+    let withdraw_ix = transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
+        &ctx.accounts.token_2022_program.key(),
+        &ctx.accounts.miko_token_mint.key(),
+        &ctx.accounts.vault_account.key(),
+        &ctx.accounts.withdraw_authority.key(),
+        &[],
+    )?;
     
-    if withheld_amount == 0 {
-        return err!(VaultError::NoFeesToCollect);
+    anchor_lang::solana_program::program::invoke_signed(
+        &withdraw_ix,
+        &[
+            ctx.accounts.miko_token_mint.to_account_info(),
+            ctx.accounts.vault_account.to_account_info(),
+            ctx.accounts.withdraw_authority.to_account_info(),
+        ],
+        withdraw_signer,
+    )?;
+    
+    // Step 3: Get the vault balance to calculate distribution
+    ctx.accounts.vault_account.reload()?;
+    let total_fees = ctx.accounts.vault_account.amount;
+    
+    if total_fees == 0 {
+        return Ok(()); // No fees to distribute
     }
     
-    // Step 3: Calculate distribution (1% owner, 4% treasury)
-    let owner_amount = withheld_amount
+    // Step 4: Calculate distribution (1% owner, 4% treasury)
+    let owner_amount = total_fees
         .checked_mul(OWNER_SHARE_BASIS_POINTS as u64)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(TAX_RATE_BASIS_POINTS as u64)
         .ok_or(VaultError::MathOverflow)?;
     
-    let treasury_amount = withheld_amount
+    let treasury_amount = total_fees
         .checked_sub(owner_amount)
         .ok_or(VaultError::MathOverflow)?;
     
-    // Step 4: Withdraw to owner
-    let withdraw_seeds = &[WITHDRAW_AUTHORITY_SEED, &[ctx.bumps.withdraw_authority]];
-    let withdraw_signer = &[&withdraw_seeds[..]];
+    // Step 5: Transfer from vault to owner and treasury
+    let vault_seeds = &[VAULT_SEED, ctx.accounts.tax_config.miko_token_mint.as_ref(), &[ctx.bumps.vault_account]];
+    let vault_signer = &[&vault_seeds[..]];
     
-    let withdraw_owner_ix = spl_token_2022::instruction::withdraw_withheld_tokens_from_mint(
-        &ctx.accounts.token_2022_program.key(),
-        &ctx.accounts.miko_token_mint.key(),
-        &ctx.accounts.owner_token_account.key(),
-        &ctx.accounts.withdraw_authority.key(),
-        &[],
-        owner_amount,
-    )?;
+    // Transfer to owner
+    if owner_amount > 0 {
+        let cpi_accounts = TransferChecked {
+            from: ctx.accounts.vault_account.to_account_info(),
+            to: ctx.accounts.owner_token_account.to_account_info(),
+            mint: ctx.accounts.miko_token_mint.to_account_info(),
+            authority: ctx.accounts.vault_account.to_account_info(),
+        };
+        
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_2022_program.to_account_info(),
+            cpi_accounts,
+            vault_signer,
+        );
+        
+        token_2022::transfer_checked(cpi_ctx, owner_amount, 9)?;
+    }
     
-    anchor_lang::solana_program::program::invoke_signed(
-        &withdraw_owner_ix,
-        &[
-            ctx.accounts.miko_token_mint.to_account_info(),
-            ctx.accounts.owner_token_account.to_account_info(),
-            ctx.accounts.withdraw_authority.to_account_info(),
-        ],
-        withdraw_signer,
-    )?;
+    // Transfer to treasury
+    if treasury_amount > 0 {
+        let cpi_accounts = TransferChecked {
+            from: ctx.accounts.vault_account.to_account_info(),
+            to: ctx.accounts.treasury_token_account.to_account_info(),
+            mint: ctx.accounts.miko_token_mint.to_account_info(),
+            authority: ctx.accounts.vault_account.to_account_info(),
+        };
+        
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_2022_program.to_account_info(),
+            cpi_accounts,
+            vault_signer,
+        );
+        
+        token_2022::transfer_checked(cpi_ctx, treasury_amount, 9)?;
+    }
     
-    // Step 5: Withdraw to treasury
-    let withdraw_treasury_ix = spl_token_2022::instruction::withdraw_withheld_tokens_from_mint(
-        &ctx.accounts.token_2022_program.key(),
-        &ctx.accounts.miko_token_mint.key(),
-        &ctx.accounts.treasury_token_account.key(),
-        &ctx.accounts.withdraw_authority.key(),
-        &[],
-        treasury_amount,
-    )?;
-    
-    anchor_lang::solana_program::program::invoke_signed(
-        &withdraw_treasury_ix,
-        &[
-            ctx.accounts.miko_token_mint.to_account_info(),
-            ctx.accounts.treasury_token_account.to_account_info(),
-            ctx.accounts.withdraw_authority.to_account_info(),
-        ],
-        withdraw_signer,
-    )?;
-    
-    // Update total fees collected
-    ctx.accounts.tax_config.total_fees_collected = ctx.accounts.tax_config.total_fees_collected
-        .checked_add(withheld_amount)
-        .ok_or(VaultError::MathOverflow)?;
-    
-    msg!("Fees collected and distributed:");
-    msg!("  Total: {} MIKO", withheld_amount);
-    msg!("  Owner (1%): {} MIKO", owner_amount);
-    msg!("  Treasury (4%): {} MIKO", treasury_amount);
+    msg!("Distributed fees: {} to owner, {} to treasury", owner_amount, treasury_amount);
     
     Ok(())
 }

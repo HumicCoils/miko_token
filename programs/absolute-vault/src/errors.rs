@@ -31,4 +31,7 @@ pub enum VaultError {
     
     #[msg("Invalid holder data")]
     InvalidHolderData,
+    
+    #[msg("Not implemented")]
+    NotImplemented,
 }

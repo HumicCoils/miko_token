@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::{constants::*, errors::VaultError, state::{TaxConfig, ExclusionList}};
+use crate::{constants::*, state::{TaxConfig, ExclusionList}};
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {

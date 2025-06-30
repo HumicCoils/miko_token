@@ -11,6 +11,10 @@ MIKO Token implements an automated tax and reward system that works seamlessly w
 - **Automated Distribution**: Tax collected and distributed every 5 minutes
 - **Dynamic Eligibility**: $100+ USD minimum holding requirement
 
+## Current Status
+
+⚠️ **Build Issues**: The project currently has compilation issues with SPL Token-2022 v0.9 due to stack overflow errors in the confidential transfer proof functions. This is a known issue with the library when building for BPF.
+
 ## Tax Distribution
 
 - **1% to Owner**: Direct payment for project maintenance
@@ -67,9 +71,38 @@ transfer_fee_config {
 
 ## Programs
 
-- **Absolute Vault**: Tax collection and distribution
-- **Smart Dial**: Reward token configuration
-- **Token-2022**: MIKO token with transfer fees
+### Absolute Vault
+Tax collection and distribution program. Features:
+- Harvest Token-2022 withheld fees from token accounts
+- Split fees: 1% to owner, 4% to treasury
+- Maintain holder registry with dynamic eligibility
+- Distribute rewards based on holder balances
+- Manage exclusion lists for non-user wallets
+
+### Smart Dial
+Reward token configuration program. Features:
+- Store current reward token selection
+- Update reward token based on AI agent tweets
+- Maintain treasury wallet configuration
+- Track update history and statistics
+
+## Building
+
+### Smart Dial (Working)
+```bash
+cargo build-sbf --manifest-path programs/smart-dial/Cargo.toml
+```
+
+### Absolute Vault (Has Issues)
+The Absolute Vault program currently fails to build due to SPL Token-2022 v0.9 stack overflow issues:
+```
+Error: Function verify_transfer_with_fee_proof Stack offset of 4264 exceeded max offset of 4096
+```
+
+**Workaround Options**:
+1. Use SPL Token-2022 v0.8 or earlier
+2. Disable confidential transfer features
+3. Implement manual tax collection instead of Token-2022 transfer fees
 
 ## Requirements
 
@@ -79,3 +112,13 @@ transfer_fee_config {
 - Node.js 18+
 - Twitter API access
 - Birdeye API key
+
+## Testing
+
+A simplified test version is available in the `/test` directory that:
+- Uses mock tweets instead of Twitter API
+- Distributes MIKO directly without swaps
+- Uses fixed 100k MIKO threshold instead of USD value
+- Runs immediately for testing
+
+See `/test/README.md` for test version documentation.

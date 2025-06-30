@@ -14,15 +14,11 @@ pub struct UpdateHolderRegistry<'info> {
     pub tax_config: Account<'info, TaxConfig>,
     
     #[account(
-        init_if_needed,
-        payer = keeper_bot,
-        space = HolderRegistry::LEN,
+        mut,
         seeds = [HOLDER_REGISTRY_SEED],
         bump
     )]
     pub holder_registry: Account<'info, HolderRegistry>,
-    
-    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(

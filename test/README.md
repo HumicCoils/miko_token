@@ -2,6 +2,10 @@
 
 This folder contains a simplified test version for devnet testing. The test version removes external dependencies and allows immediate testing of all features.
 
+## Why Test Version?
+
+The production version has build issues with SPL Token-2022 v0.9 due to stack overflow errors in confidential transfer functions. This test version bypasses those issues by using simplified logic.
+
 ## Key Differences
 
 | Feature | Production | Test Version |

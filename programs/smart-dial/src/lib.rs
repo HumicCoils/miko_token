@@ -1,11 +1,12 @@
 use anchor_lang::prelude::*;
 
+pub mod errors;
 pub mod state;
 pub mod instructions;
 
 use instructions::*;
 
-declare_id!("SDia1z3nQJGbcVMnEqFxGEUH5WMCWsUruKFMQkwvjLn");
+declare_id!("AUDTsa247Vb19q4p9Y3xkcZeMtTQPTpNoaDQxBtE1Swx");
 
 #[program]
 pub mod smart_dial {

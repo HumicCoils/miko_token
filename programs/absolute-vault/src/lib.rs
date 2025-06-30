@@ -6,8 +6,9 @@ pub mod instructions;
 pub mod state;
 
 use instructions::*;
+use state::ExclusionType;
 
-declare_id!("AVau1tVPk2k8uNzxQJbCqZUWhFbmcDQ4ejZvvYPfxJZG");
+declare_id!("JD4VGfeMaKfJ2NmohDvYWFbZo3efeCrUgiZPLZ21E6mS");
 
 #[program]
 pub mod absolute_vault {
@@ -20,6 +21,14 @@ pub mod absolute_vault {
         owner_wallet: Pubkey,
     ) -> Result<()> {
         instructions::initialize::handler(ctx, smart_dial_program, keeper_bot_wallet, owner_wallet)
+    }
+
+    pub fn initialize_registry(ctx: Context<InitializeRegistry>) -> Result<()> {
+        instructions::initialize_registry::handler(ctx)
+    }
+
+    pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+        instructions::initialize_vault::handler(ctx)
     }
 
     pub fn harvest_and_collect_fees(
