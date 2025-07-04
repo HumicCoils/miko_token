@@ -1,0 +1,408 @@
+# MIKO Token Development Checklist
+
+## Phase 1: Foundation Setup
+
+### Environment Setup
+- [x] Install Rust (1.75+) ✓ rustc 1.87.0
+  - Use official Rust installation script
+- [x] Install Solana CLI (1.18+) ✓ solana-cli 2.2.16
+  - Download from Solana release page
+- [x] Install Anchor Framework (0.30.1)
+  - Install via cargo from Anchor repository
+- [x] Set up local Solana validator
+  - Run solana-test-validator for local testing
+- [x] Create workspace directory structure
+  ```
+  miko-token/
+  ├── programs/
+  │   ├── absolute-vault/
+  │   └── smart-dial/
+  ├── keeper-bot/
+  ├── tests/
+  └── scripts/
+  ```
+
+### Project Initialization
+- [x] Initialize Anchor workspace
+  - Use anchor init with JavaScript template
+- [x] Configure Anchor.toml for Token-2022 support
+- [x] Set up TypeScript project for keeper bot
+  - Initialize npm project in keeper-bot directory
+- [x] Install required npm packages
+  - @solana/web3.js, @solana/spl-token, @coral-xyz/anchor
+  - node-cron, axios, dotenv
+  - TypeScript and development dependencies
+
+### Token Creation
+- [x] Write Token-2022 deployment script
+- [x] Implement transfer fee extension initialization
+- [x] Set transfer fee to 500 basis points (5%)
+- [x] Revoke transfer fee config authority after creation (make 5% tax immutable)
+- [x] Deploy test token on devnet
+- [x] Verify transfer fee collection works
+- [x] Verify fee cannot be changed after authority revocation
+- [x] Test with mock DEX swap transactions
+
+## Phase 2: Absolute Vault Program
+
+### Program Setup
+- [x] Create program structure in `programs/absolute-vault/`
+- [x] Define program ID in lib.rs
+- [x] Set up state account structures
+- [x] Implement error codes enum
+
+### State Structures
+- [x] Implement `VaultState` struct
+  - Must include: authority, treasury, owner_wallet, token_mint, min_hold_amount, fee_exclusions, reward_exclusions, bump
+- [x] Implement `ExclusionEntry` struct
+  - Must include: wallet address and exclusion type (FEE_ONLY, REWARD_ONLY, BOTH)
+- [x] Create PDA seeds constants
+
+### Instructions Implementation
+- [x] `initialize` instruction
+  - Validate authority
+  - Create vault state PDA
+  - Set initial configuration
+  - Auto-add system accounts (owner, treasury, keeper, program) to both exclusion lists
+  - Emit initialization event
+- [x] `harvest_fees` instruction
+  - Validate caller authority
+  - Fetch token accounts with withheld fees
+  - Skip accounts in fee_exclusions list
+  - Harvest fees from eligible accounts
+  - Split fees (20% owner, 80% treasury)
+  - Handle SOL balance scenarios
+  - Emit harvest event
+- [x] `distribute_rewards` instruction
+  - Validate caller authority
+  - Fetch eligible holders from Birdeye at distribution time
+  - Filter out accounts in reward_exclusions list
+  - Calculate proportional rewards
+  - Execute token transfers
+  - Update distribution timestamp
+  - Emit distribution event
+- [x] `manage_exclusions` instruction
+  - Add/remove wallet from exclusion lists
+  - Support exclusion types: FEE_ONLY, REWARD_ONLY, BOTH
+  - Validate authority for changes
+  - Emit exclusion update event
+- [x] `update_config` instruction
+  - Update minimum hold amount
+  - Update treasury wallet
+  - Update owner wallet
+- [x] `emergency_withdraw_vault` instruction
+  - Validate authority
+  - Withdraw specified token/SOL amount from vault
+  - Transfer to specified destination
+  - Emit withdrawal event
+- [x] `emergency_withdraw_withheld` instruction
+  - Validate authority
+  - Harvest and withdraw withheld fees from specific accounts
+  - Transfer to authority wallet
+  - Emit withdrawal event
+
+### Program Compilation Issues (BLOCKED)
+- [ ] Fix import/type issues in lib.rs
+- [ ] Resolve lifetime parameters in distribute_rewards
+- [ ] Implement proper Token-2022 harvest CPI
+- [ ] Fix Context type compatibility issues
+- [ ] Test successful compilation
+
+### Program Testing (BLOCKED - Pending Compilation)
+- [ ] Write unit tests for each instruction
+- [ ] Test fee harvesting mechanics
+- [ ] Test reward distribution calculations
+- [ ] Test exclusion list management (fee vs reward exclusions)
+- [ ] Test emergency withdrawal functions
+- [ ] Test system account auto-exclusion
+- [ ] Test edge cases and error conditions
+
+## Phase 3: Smart Dial Program
+
+### Program Setup
+- [ ] Create program structure in `programs/smart-dial/`
+- [ ] Define program ID in lib.rs
+- [ ] Set up state structures
+- [ ] Implement error codes
+
+### State Implementation
+- [ ] Implement `DialState` struct
+  - Must include: authority, current_reward_token, treasury_wallet, last_update, update_count, bump
+- [ ] Implement `UpdateRecord` struct
+  - Must include: timestamp, reward_token, updated_by
+
+### Instructions
+- [ ] `initialize` instruction
+  - Create dial state PDA
+  - Set initial reward token
+  - Set treasury configuration
+- [ ] `update_reward_token` instruction
+  - Validate update authority
+  - Verify token exists
+  - Update current reward token
+  - Add to update history
+  - Emit update event
+- [ ] `update_treasury` instruction
+  - Validate authority
+  - Update treasury wallet
+  - Emit configuration event
+- [ ] `get_config` view instruction
+  - Return current configuration
+  - Include update history
+
+### Testing
+- [ ] Test initialization
+- [ ] Test reward token updates
+- [ ] Test treasury updates
+- [ ] Test access control
+- [ ] Test update history tracking
+
+## Phase 4: Keeper Bot Development
+
+### Project Structure
+- [ ] Create bot directory structure
+  ```
+  keeper-bot/
+  ├── src/
+  │   ├── modules/
+  │   │   ├── twitter/
+  │   │   ├── harvester/
+  │   │   ├── swapper/
+  │   │   └── distributor/
+  │   ├── utils/
+  │   ├── config/
+  │   └── index.ts
+  ```
+
+### Configuration Module
+- [ ] Create config loader
+- [ ] Set up environment variables
+  - SOLANA_RPC_URL
+  - KEEPER_PRIVATE_KEY
+  - TWITTER_API_KEY and SECRET
+  - BIRDEYE_API_KEY
+- [ ] Implement keypair management
+- [ ] Create program ID constants
+
+### Twitter Monitor Module
+- [ ] Set up Twitter API v2 client
+- [ ] Implement tweet fetching for @project_miko
+- [ ] Create tweet parser for $SYMBOL extraction
+- [ ] Implement time window check (00:00-02:00 UTC)
+- [ ] Add error handling for API failures
+- [ ] Create tweet verification logic
+
+### Token Selector Module
+- [ ] Integrate Birdeye API
+- [ ] Implement token lookup by symbol
+- [ ] Fetch 24h volume data
+- [ ] Compare and select highest volume token
+- [ ] Validate token liquidity threshold
+- [ ] Cache selection results
+
+### Fee Harvester Module
+- [ ] Implement token account scanner
+- [ ] Identify accounts with withheld fees
+- [ ] Filter out accounts in fee_exclusions list
+- [ ] Create batch harvest transactions
+- [ ] Implement retry logic for failed transactions
+- [ ] Add progress tracking
+- [ ] Optimize for RPC rate limits
+
+### Swap Manager Module
+- [ ] Integrate Jupiter API v6
+- [ ] Implement quote fetching
+- [ ] Create swap transaction builder
+- [ ] Add slippage protection (1%)
+- [ ] Implement SOL balance logic
+  - Check keeper wallet SOL balance
+  - Determine swap strategy based on balance
+  - Handle SOL vs non-SOL reward scenarios
+- [ ] Add transaction confirmation logic
+
+### Distribution Engine Module
+- [ ] Integrate Birdeye API
+  - Configure API authentication with headers
+  - Set up base URL: https://public-api.birdeye.so
+  
+- [ ] Fetch MIKO token price in USD
+  - Use `/defi/price` endpoint with MIKO token address
+  - Parse response to extract USD value
+  - Implement error handling for API failures
+  
+- [ ] Query all MIKO holders
+  - Use `/defi/token_holders` endpoint
+  - Implement pagination (100 items per request)
+  - Handle rate limiting with appropriate delays
+  - Build complete holder list across all pages
+  
+- [ ] Calculate USD value for each holder
+  - Multiply holder balance by current MIKO price
+  - Filter holders with value >= $100 USD
+  - Maintain list of eligible holders
+  
+- [ ] Filter holders >= $100 USD
+  - Apply minimum USD value threshold
+  - Exclude wallets in reward_exclusions list
+  - Skip system accounts (already in exclusions)
+  - Use filtered list directly for distribution
+  
+- [ ] Calculate proportional rewards
+  - Sum total balance of eligible holders
+  - Calculate each holder's percentage share
+  - Determine reward amount per holder
+  
+- [ ] Create batch distribution transactions
+  - Group holders into batches (20 per transaction)
+  - Build transfer instructions for each batch
+  - Sign and send transactions sequentially
+  
+- [ ] Handle large holder counts (chunking)
+  - Process distributions in batches to avoid transaction size limits
+  - Implement progress tracking for large operations
+  
+- [ ] Track distribution success/failure
+  - Log successful distributions
+  - Retry failed transactions
+  - Generate distribution reports
+
+### Scheduler Setup
+- [ ] Implement cron job scheduler
+- [ ] Monday 03:00 UTC task
+  - Check AI tweets
+  - Update reward token
+- [ ] Every 5 minutes task
+  - Harvest fees
+  - Check current holder eligibility
+  - Execute swaps
+  - Distribute rewards
+- [ ] Add health check monitoring
+
+### Error Handling & Logging
+- [ ] Implement comprehensive logging
+- [ ] Add error recovery mechanisms
+- [ ] Create alert system for failures
+- [ ] Implement transaction retry logic
+- [ ] Add performance metrics tracking
+
+## Phase 5: Integration Testing
+
+### End-to-End Tests
+- [ ] Deploy all programs to devnet
+- [ ] Create test MIKO token with fees
+- [ ] Run keeper bot in test mode
+- [ ] Simulate tweet detection
+- [ ] Test complete harvest → swap → distribute flow
+- [ ] Verify SOL balance management
+
+### Scenario Testing
+- [ ] Test with 10 holders
+- [ ] Test with 100 holders
+- [ ] Test with 1000+ holders
+- [ ] Test reward token = SOL scenario
+- [ ] Test reward token ≠ SOL scenario
+- [ ] Test low SOL balance scenarios
+- [ ] Test API failure recovery
+- [ ] Test network congestion handling
+
+### Performance Testing
+- [ ] Measure harvest transaction time
+- [ ] Measure distribution transaction time
+- [ ] Test RPC request optimization
+- [ ] Verify 5-minute cycle completion
+- [ ] Load test with high holder count
+
+## Phase 6: Security & Audit Preparation
+
+### Security Review
+- [ ] Review all program authorities
+- [ ] Verify PDA derivations
+- [ ] Check for arithmetic overflows
+- [ ] Validate all input parameters
+- [ ] Review access control on admin functions
+- [ ] Verify emergency withdrawal authority checks
+- [ ] Test exclusion list integrity
+- [ ] Check for reentrancy vulnerabilities
+
+### Economic Security
+- [ ] Verify fee calculation accuracy
+- [ ] Confirm 5% tax is immutable (authority revoked)
+- [ ] Test distribution fairness
+- [ ] Check for MEV vulnerabilities
+- [ ] Validate slippage protections
+- [ ] Test exclusion list effectiveness
+
+### Code Quality
+- [ ] Run clippy on Rust code
+- [ ] Run ESLint on TypeScript code
+- [ ] Achieve >80% test coverage
+- [ ] Document all public functions
+- [ ] Create deployment guide
+
+## Phase 7: Mainnet Deployment
+
+### Pre-deployment Checklist
+- [ ] Final code review completed
+- [ ] All tests passing
+- [ ] Security audit (if conducted) issues resolved
+- [ ] Production RPC endpoint configured
+- [ ] API keys secured in production environment
+- [ ] Keeper bot infrastructure ready (VPS/Cloud)
+- [ ] Monitoring and alerting configured
+
+### Deployment Steps
+- [ ] Generate program keypairs
+- [ ] Deploy Absolute Vault program
+- [ ] Deploy Smart Dial program
+- [ ] Create MIKO token on mainnet
+- [ ] Set 5% transfer fee
+- [ ] Revoke transfer fee config authority (make tax immutable)
+- [ ] Initialize Absolute Vault
+- [ ] Initialize Smart Dial
+- [ ] Fund keeper bot wallet with SOL
+- [ ] Start keeper bot service
+- [ ] Verify initial harvest cycle
+- [ ] Monitor first 24 hours
+
+### Post-deployment
+- [ ] Document deployed program IDs
+- [ ] Create operation runbook
+- [ ] Set up backup keeper bot instance
+- [ ] Configure automated backups
+- [ ] Create incident response plan
+
+## Ongoing Maintenance Tasks
+
+### Daily
+- [ ] Monitor bot health
+- [ ] Check distribution success rate
+- [ ] Verify SOL balance adequacy
+- [ ] Review error logs
+
+### Weekly
+- [ ] Verify AI tweet detection
+- [ ] Confirm reward token update
+- [ ] Review holder count growth
+- [ ] Check exclusion list updates
+
+### Monthly
+- [ ] Performance optimization review
+- [ ] Security update check
+- [ ] Cost analysis (RPC, transactions)
+- [ ] Holder feedback review
+
+## Documentation
+
+### Technical Documentation
+- [ ] Program architecture document
+- [ ] API integration guide
+- [ ] Deployment instructions
+- [ ] Troubleshooting guide
+
+### Operational Documentation
+- [ ] Keeper bot operation manual
+- [ ] Monitoring setup guide
+- [ ] Incident response procedures
+- [ ] Upgrade procedures
+
+This checklist provides a comprehensive guide for developing the MIKO token system. Check off each item as you complete it to track your progress through the development process.

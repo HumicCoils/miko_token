@@ -2,39 +2,51 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum VaultError {
-    #[msg("Not initialized")]
-    NotInitialized,
-    
     #[msg("Unauthorized access")]
-    UnauthorizedAccess,
+    Unauthorized,
     
-    #[msg("Math overflow")]
-    MathOverflow,
+    #[msg("Invalid authority")]
+    InvalidAuthority,
     
     #[msg("Invalid token mint")]
     InvalidTokenMint,
     
-    #[msg("Holder registry full")]
-    HolderRegistryFull,
+    #[msg("Insufficient balance")]
+    InsufficientBalance,
     
-    #[msg("Wallet already excluded")]
-    WalletAlreadyExcluded,
+    #[msg("Account already excluded")]
+    AlreadyExcluded,
     
-    #[msg("Wallet not excluded")]
-    WalletNotExcluded,
+    #[msg("Account not excluded")]
+    NotExcluded,
     
     #[msg("Invalid exclusion type")]
     InvalidExclusionType,
     
-    #[msg("No fees to collect")]
-    NoFeesToCollect,
+    #[msg("Too many accounts to process")]
+    TooManyAccounts,
     
     #[msg("Invalid holder data")]
     InvalidHolderData,
     
-    #[msg("Not implemented")]
-    NotImplemented,
+    #[msg("Arithmetic overflow")]
+    ArithmeticOverflow,
     
-    #[msg("Invalid token account")]
-    InvalidTokenAccount,
+    #[msg("Invalid fee configuration")]
+    InvalidFeeConfig,
+    
+    #[msg("Cannot exclude system account")]
+    CannotExcludeSystemAccount,
+    
+    #[msg("Cannot remove system account exclusion")]
+    CannotRemoveSystemExclusion,
+    
+    #[msg("Invalid withdraw amount")]
+    InvalidWithdrawAmount,
+    
+    #[msg("Token account not found")]
+    TokenAccountNotFound,
+    
+    #[msg("Invalid reward token")]
+    InvalidRewardToken,
 }

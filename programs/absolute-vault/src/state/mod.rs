@@ -1,7 +1,5 @@
-pub mod config;
-pub mod holder_registry;
-pub mod exclusions;
+pub mod vault_state;
+pub mod exclusion_entry;
 
-pub use config::*;
-pub use holder_registry::*;
-pub use exclusions::*;
+pub use vault_state::*;
+pub use exclusion_entry::*;

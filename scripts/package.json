@@ -1,23 +1,22 @@
 {
   "name": "miko-token-scripts",
   "version": "1.0.0",
-  "description": "Scripts for MIKO token deployment and testing",
+  "description": "Scripts for MIKO token deployment and management",
   "scripts": {
-    "initialize": "node initialize-programs.js",
-    "create-token": "node create-miko-token.js",
-    "test-transactions": "node generate-test-transactions.js"
+    "create-token": "ts-node create-miko-token.ts",
+    "test-token": "ts-node test-token-fees.ts",
+    "build": "tsc",
+    "dev": "ts-node"
   },
   "dependencies": {
-    "@solana/web3.js": "^1.87.6",
-    "@solana/spl-token": "^0.3.9",
-    "@coral-xyz/anchor": "^0.29.0",
-    "dotenv": "^16.3.1",
-    "bs58": "^5.0.0",
-    "bn.js": "^5.2.1"
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/web3.js": "^1.91.0",
+    "@solana/spl-token": "^0.4.8",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.3.2"
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
   }
 }

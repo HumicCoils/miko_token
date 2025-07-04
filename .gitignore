@@ -1,73 +1,84 @@
-# Dependencies
+# Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-.pnpm-store/
+lerna-debug.log*
+.npm
+*.log
+logs/
 
-# Build outputs
-target/
+# TypeScript
+*.tsbuildinfo
 dist/
 build/
 out/
-*.so
 
-# Anchor specific
-.anchor/
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# Solana/Anchor
+target/
+.anchor
 **/*.rs.bk
 Cargo.lock
+test-ledger/
+.cache
 
-# IDE and editor files
+# Wallet files
+*.json
+!package.json
+!tsconfig.json
+!Anchor.toml
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
-*.sublime-workspace
-*.sublime-project
 
-# Environment files
-.env
-.env.*
-!.env.example
-!.env.test.example
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Testing
+coverage/
+.nyc_output
 
-# Keys and sensitive files
-*.keypair
-*-keypair.json
-*.key
-*.pem
-*.p12
-*.pfx
-wallets/
-!scripts/example-keypair.json
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
 
-# Logs
+# Deployment artifacts
+deploy-config.json
+program-keypairs/
+
+# Generated documentation
+docs/
+
+# Python (for any scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Backup files
+*.backup
+*.bak
+
+# Log files
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
-
-# Test coverage
-coverage/
-*.lcov
-.nyc_output/
-
-# TypeScript
-*.tsbuildinfo
-.npm
-
-# Docker
-docker-compose.override.yml
 
 # OS files
 .DS_Store
@@ -77,56 +88,16 @@ docker-compose.override.yml
 .Trashes
 ehthumbs.db
 Thumbs.db
-desktop.ini
 
-# Temporary files
-*.tmp
-*.temp
-*.cache
-tmp/
-temp/
+# Keeper bot specific
+keeper-bot/dist/
+keeper-bot/node_modules/
+keeper-bot/.env
 
-# Deployment artifacts
-deployed-programs.json
-deployment-*.log
-buffer-*.json
+# Test artifacts
+test-results/
+.test-cache/
 
-# Recovered buffer keypairs
-*-buffer-keypair.json
-recovered-*.json
-
-# Build artifacts specific to Solana
-programs/*/target/
-test-ledger/
-
-# Package manager files
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# Python (if any scripts)
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-venv/
-ENV/
-
-# Rust
-**/*.rs.bk
-*.pdb
-
-# Generated IDL files (can be regenerated)
-target/idl/
-target/types/
-
-# Local notes and drafts
-*.draft
-*.todo
-local-notes/
-
-# Claude AI
-.claude/
-
-# Git
-.git/
+# Build outputs
+/programs/*/target/
+*.so

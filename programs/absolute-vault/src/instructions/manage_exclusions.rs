@@ -1,80 +1,124 @@
 use anchor_lang::prelude::*;
-use crate::{constants::*, errors::VaultError, state::{TaxConfig, ExclusionList, ExclusionType}};
+
+use crate::{
+    constants::*,
+    errors::VaultError,
+    state::{VaultState, ExclusionEntry, ExclusionType, ExclusionAction},
+};
 
 #[derive(Accounts)]
+#[instruction(wallet: Pubkey, exclusion_type: ExclusionType, action: ExclusionAction)]
 pub struct ManageExclusions<'info> {
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    
     #[account(
-        seeds = [TAX_CONFIG_SEED],
-        bump = tax_config.bump,
-        constraint = tax_config.authority == authority.key() @ VaultError::UnauthorizedAccess
+        seeds = [VAULT_SEED],
+        bump = vault_state.bump
     )]
-    pub tax_config: Account<'info, TaxConfig>,
+    pub vault_state: Account<'info, VaultState>,
     
     #[account(
         mut,
-        seeds = [EXCLUSIONS_SEED],
-        bump = exclusion_list.bump,
+        constraint = authority.key() == vault_state.authority @ VaultError::InvalidAuthority
     )]
-    pub exclusion_list: Account<'info, ExclusionList>,
+    pub authority: Signer<'info>,
+    
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = ExclusionEntry::LEN,
+        seeds = [EXCLUSION_SEED, wallet.as_ref()],
+        bump
+    )]
+    pub exclusion_entry: Account<'info, ExclusionEntry>,
+    
+    pub system_program: Program<'info, System>,
 }
 
-pub fn add_exclusion(
-    ctx: Context<ManageExclusions>,
+pub fn handler(
+    mut ctx: Context<ManageExclusions>,
     wallet: Pubkey,
     exclusion_type: ExclusionType,
+    action: ExclusionAction,
 ) -> Result<()> {
-    let exclusion_list = &mut ctx.accounts.exclusion_list;
+    let vault_state = &ctx.accounts.vault_state;
+    let exclusion_entry = &mut ctx.accounts.exclusion_entry;
+    let clock = Clock::get()?;
     
-    match exclusion_type {
-        ExclusionType::RewardExclusion => {
+    match action {
+        ExclusionAction::Add => {
+            // Check if already initialized (existing exclusion)
+            if exclusion_entry.wallet != Pubkey::default() {
+                // Update existing exclusion
+                msg!("Updating existing exclusion for {}", wallet);
+                
+                // Cannot remove system account exclusions
+                if vault_state.is_system_account(&wallet) {
+                    require!(
+                        exclusion_type == ExclusionType::Both,
+                        VaultError::CannotRemoveSystemExclusion
+                    );
+                }
+                
+                exclusion_entry.exclusion_type = exclusion_type;
+            } else {
+                // New exclusion
+                msg!("Adding new exclusion for {}", wallet);
+                
+                exclusion_entry.wallet = wallet;
+                exclusion_entry.exclusion_type = exclusion_type;
+                exclusion_entry.created_at = clock.unix_timestamp;
+                exclusion_entry.added_by = ctx.accounts.authority.key();
+                exclusion_entry.bump = ctx.bumps.exclusion_entry;
+            }
+            
+            msg!("Exclusion added: {} - Type: {:?}", wallet, exclusion_type);
+        },
+        
+        ExclusionAction::Remove => {
+            // Verify exclusion exists
             require!(
-                !exclusion_list.reward_exclusions.contains(&wallet),
-                VaultError::WalletAlreadyExcluded
+                exclusion_entry.wallet != Pubkey::default(),
+                VaultError::NotExcluded
             );
-            exclusion_list.reward_exclusions.push(wallet);
-            msg!("Added {} to reward exclusions", wallet);
-        }
-        ExclusionType::TaxExemption => {
+            
+            // Cannot remove system account exclusions
             require!(
-                !exclusion_list.tax_exemptions.contains(&wallet),
-                VaultError::WalletAlreadyExcluded
+                !vault_state.is_system_account(&wallet),
+                VaultError::CannotRemoveSystemExclusion
             );
-            exclusion_list.tax_exemptions.push(wallet);
-            msg!("Added {} to tax exemptions", wallet);
+            
+            // Close the account and return lamports to authority
+            let exclusion_lamports = exclusion_entry.to_account_info().lamports();
+            **exclusion_entry.to_account_info().try_borrow_mut_lamports()? = 0;
+            **ctx.accounts.authority.to_account_info().try_borrow_mut_lamports()? += exclusion_lamports;
+            
+            msg!("Exclusion removed: {}", wallet);
         }
     }
     
     Ok(())
 }
 
-pub fn remove_exclusion(
-    ctx: Context<ManageExclusions>,
-    wallet: Pubkey,
-    exclusion_type: ExclusionType,
-) -> Result<()> {
-    let exclusion_list = &mut ctx.accounts.exclusion_list;
+// Separate instruction to check exclusion status
+#[derive(Accounts)]
+pub struct CheckExclusion<'info> {
+    #[account(
+        seeds = [EXCLUSION_SEED, wallet.key().as_ref()],
+        bump
+    )]
+    pub exclusion_entry: Account<'info, ExclusionEntry>,
     
-    match exclusion_type {
-        ExclusionType::RewardExclusion => {
-            let pos = exclusion_list.reward_exclusions
-                .iter()
-                .position(|w| w == &wallet)
-                .ok_or(VaultError::WalletNotExcluded)?;
-            exclusion_list.reward_exclusions.remove(pos);
-            msg!("Removed {} from reward exclusions", wallet);
-        }
-        ExclusionType::TaxExemption => {
-            let pos = exclusion_list.tax_exemptions
-                .iter()
-                .position(|w| w == &wallet)
-                .ok_or(VaultError::WalletNotExcluded)?;
-            exclusion_list.tax_exemptions.remove(pos);
-            msg!("Removed {} from tax exemptions", wallet);
-        }
-    }
+    /// CHECK: Wallet to check
+    pub wallet: AccountInfo<'info>,
+}
+
+pub fn check_exclusion(ctx: Context<CheckExclusion>) -> Result<(bool, bool)> {
+    let exclusion_entry = &ctx.accounts.exclusion_entry;
     
-    Ok(())
+    let excludes_fees = exclusion_entry.excludes_fees();
+    let excludes_rewards = exclusion_entry.excludes_rewards();
+    
+    msg!("Wallet {} - Excludes fees: {}, Excludes rewards: {}", 
+        ctx.accounts.wallet.key(), excludes_fees, excludes_rewards);
+    
+    Ok((excludes_fees, excludes_rewards))
 }
