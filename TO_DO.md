@@ -101,14 +101,22 @@
   - Transfer to authority wallet
   - Emit withdrawal event
 
-### Program Compilation Issues (BLOCKED)
-- [ ] Fix import/type issues in lib.rs
-- [ ] Resolve lifetime parameters in distribute_rewards
-- [ ] Implement proper Token-2022 harvest CPI
-- [ ] Fix Context type compatibility issues
-- [ ] Test successful compilation
+### Program Compilation ✅
+- [x] Fixed import/type issues in lib.rs
+- [x] Resolved lifetime parameters in distribute_rewards
+- [x] Implemented proper Token-2022 harvest CPI using spl_token_2022::extension::transfer_fee::instruction
+- [x] Fixed Context type compatibility issues
+- [x] Successfully compiled program
+- [x] Deployed to devnet (Program ID: DHzZjjPoRmbYvTsXE3Je1JW2M4qgkKsqsuTz3uKHh4qJ)
 
-### Program Testing (BLOCKED - Pending Compilation)
+### Vault Initialization (BLOCKED)
+- [ ] Initialize vault with proper configuration
+  - **BLOCKER**: Cannot serialize Anchor instructions without proper IDL
+  - IDL generation fails due to anchor-syn dependency issues
+  - Manual IDL creation results in version compatibility errors
+  - Need to resolve this before any testing can proceed
+
+### Program Testing (BLOCKED - Requires Initialized Vault)
 - [ ] Write unit tests for each instruction
 - [ ] Test fee harvesting mechanics
 - [ ] Test reward distribution calculations

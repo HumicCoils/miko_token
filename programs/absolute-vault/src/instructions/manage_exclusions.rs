@@ -34,7 +34,7 @@ pub struct ManageExclusions<'info> {
 }
 
 pub fn handler(
-    mut ctx: Context<ManageExclusions>,
+    ctx: Context<ManageExclusions>,
     wallet: Pubkey,
     exclusion_type: ExclusionType,
     action: ExclusionAction,

@@ -44,8 +44,8 @@ pub struct DistributeRewards<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(
-    ctx: Context<DistributeRewards>,
+pub fn handler<'info>(
+    ctx: Context<'_, '_, '_, 'info, DistributeRewards<'info>>,
     holder_data: Vec<HolderData>,
 ) -> Result<()> {
     let vault_state = &mut ctx.accounts.vault_state;
@@ -123,64 +123,53 @@ pub fn handler(
     // Distribute proportionally
     let mut total_distributed = 0u64;
     let mut recipients = 0u32;
-    
+    let is_token_2022 = is_token_2022_mint(&ctx.accounts.reward_token_mint)?;
+
+    // Prepare a slice of the remaining accounts to avoid lifetime issues.
+    let holder_reward_accounts = ctx.remaining_accounts;
+
     for (idx, holder) in eligible_holders.iter().enumerate() {
-        // Calculate holder's share
         let share = calculate_reward_share(
             holder.balance,
             total_eligible_balance,
             vault_balance
         )?;
-        
+
         if share == 0 {
             continue;
         }
-        
-        // Find holder's reward token account in remaining accounts
-        let holder_reward_account = ctx.remaining_accounts
+
+        // Get the holder's reward token account from the prepared slice.
+        let holder_reward_account = holder_reward_accounts
             .get(idx)
             .ok_or(VaultError::InvalidHolderData)?;
             
-        // Transfer rewards
+        // Prepare PDA signer seeds.
         let seeds = &[VAULT_SEED, &[vault_state.bump]];
         let signer_seeds = &[&seeds[..]];
         
-        // Determine which token program to use based on reward token
-        let is_token_2022 = is_token_2022_mint(&ctx.accounts.reward_token_mint)?;
-        
         if is_token_2022 {
-            // Token-2022 transfer
-            anchor_spl::token_2022::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_2022_program.to_account_info(),
-                    anchor_spl::token_2022::Transfer {
-                        from: ctx.accounts.vault_reward_account.to_account_info(),
-                        to: holder_reward_account.to_account_info(),
-                        authority: vault_state.to_account_info(),
-                    },
-                    signer_seeds
-                ),
-                share,
-            )?;
+            let cpi_accounts = anchor_spl::token_2022::Transfer {
+                from: ctx.accounts.vault_reward_account.to_account_info(),
+                to: holder_reward_account.to_account_info(),
+                authority: vault_state.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_2022_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            anchor_spl::token_2022::transfer(cpi_ctx, share)?;
         } else {
-            // Regular SPL token transfer
-            anchor_spl::token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
-                    anchor_spl::token::Transfer {
-                        from: ctx.accounts.vault_reward_account.to_account_info(),
-                        to: holder_reward_account.to_account_info(),
-                        authority: vault_state.to_account_info(),
-                    },
-                    signer_seeds
-                ),
-                share,
-            )?;
+            let cpi_accounts = anchor_spl::token::Transfer {
+                from: ctx.accounts.vault_reward_account.to_account_info(),
+                to: holder_reward_account.to_account_info(),
+                authority: vault_state.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            anchor_spl::token::transfer(cpi_ctx, share)?;
         }
         
         total_distributed = total_distributed.saturating_add(share);
         recipients += 1;
-        
         msg!("Distributed {} to {}", share, holder.wallet);
     }
     

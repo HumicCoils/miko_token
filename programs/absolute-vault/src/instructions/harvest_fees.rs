@@ -4,6 +4,10 @@ use anchor_spl::{
     token_2022::{self, Token2022},
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
+// Import necessary SPL Token 2022 modules
+use spl_token_2022::{
+    extension::{StateWithExtensions, BaseStateWithExtensions},
+};
 
 use crate::{
     constants::*,
@@ -64,73 +68,90 @@ pub struct HarvestFees<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(
-    mut ctx: Context<HarvestFees>,
+pub fn handler<'info>(
+    ctx: Context<'_, '_, '_, 'info, HarvestFees<'info>>,
     accounts_to_harvest: Vec<Pubkey>,
 ) -> Result<()> {
     let vault_state = &mut ctx.accounts.vault_state;
     let clock = Clock::get()?;
-    
+
     require!(
         accounts_to_harvest.len() <= MAX_ACCOUNTS_PER_TX,
         VaultError::TooManyAccounts
     );
-    
+
     msg!("Starting fee harvest for {} accounts", accounts_to_harvest.len());
+
+    let mut total_harvested: u64 = 0;
     
-    let mut total_harvested = 0u64;
-    let mut accounts_processed = 0u32;
+    // 1. Harvest withheld fees from specified token accounts to the mint.
+    let harvest_accounts_infos: Vec<AccountInfo> = ctx.remaining_accounts
+        .iter()
+        .filter(|acc| accounts_to_harvest.contains(&acc.key()))
+        .cloned()
+        .collect();
+
+    if !harvest_accounts_infos.is_empty() {
+        msg!("Harvesting withheld fees to mint...");
+        
+        let harvest_sources: Vec<&Pubkey> = accounts_to_harvest.iter().collect();
+        let harvest_ix = spl_token_2022::extension::transfer_fee::instruction::harvest_withheld_tokens_to_mint(
+            &spl_token_2022::ID,
+            &ctx.accounts.token_mint.key(),
+            &harvest_sources,
+        )?;
+        
+        // Build accounts for invoke
+        let mut invoke_accounts = vec![
+            ctx.accounts.token_mint.to_account_info(),
+        ];
+        invoke_accounts.extend(harvest_accounts_infos.clone());
+        
+        // Invoke the harvest instruction
+        solana_program::program::invoke(
+            &harvest_ix,
+            &invoke_accounts,
+        )?;
+    }
+
+    // 2. Check the total amount of withheld fees now stored in the mint.
+    let mint_data = ctx.accounts.token_mint.try_borrow_data()?;
+    let mint_with_extension = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
     
-    // Process each account
-    for account_pubkey in accounts_to_harvest.iter() {
-        // Check if account is excluded from fees
-        let exclusion_pda = Pubkey::find_program_address(
-            &[EXCLUSION_SEED, account_pubkey.as_ref()],
-            &crate::ID
-        ).0;
-        
-        // Try to load exclusion entry
-        if let Ok(exclusion_data) = ctx.remaining_accounts.iter()
-            .find(|acc| acc.key() == exclusion_pda)
-            .ok_or(ProgramError::AccountNotFound)
-            .and_then(|acc| acc.try_borrow_data()) {
+    // Get the transfer fee config extension to read withheld amount
+    if let Ok(fee_config) = mint_with_extension.get_extension::<spl_token_2022::extension::transfer_fee::TransferFeeConfig>() {
+        let withheld_amount = u64::from(fee_config.withheld_amount);
+        msg!("Total withheld amount in mint: {}", withheld_amount);
+
+        if withheld_amount > 0 {
+            // 3. Withdraw the fees from the mint to the vault's token account.
+            // The vault program PDA must be the `withdraw_withheld_authority` for the mint.
+            let seeds = &[VAULT_SEED, &[vault_state.bump]];
+            let signer_seeds = &[&seeds[..]];
+
+            let withdraw_ix = spl_token_2022::extension::transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
+                &spl_token_2022::ID,
+                &ctx.accounts.token_mint.key(),
+                &ctx.accounts.vault_token_account.key(),
+                &vault_state.key(), // The vault PDA is the authority
+                &[],
+            )?;
+
+            solana_program::program::invoke_signed(
+                &withdraw_ix,
+                &[
+                    ctx.accounts.token_2022_program.to_account_info(),
+                    ctx.accounts.token_mint.to_account_info(),
+                    ctx.accounts.vault_token_account.to_account_info(),
+                    vault_state.to_account_info(),
+                ],
+                signer_seeds,
+            )?;
             
-            // Check if it's a valid exclusion entry
-            if exclusion_data.len() >= 8 {
-                // Skip if excluded from fees
-                msg!("Account {} is excluded from fees, skipping", account_pubkey);
-                continue;
-            }
-        }
-        
-        // Find the token account in remaining accounts
-        let token_account = ctx.remaining_accounts.iter()
-            .find(|acc| acc.key() == *account_pubkey)
-            .ok_or(VaultError::TokenAccountNotFound)?;
-            
-        // Harvest withheld fees from this account
-        let harvest_result = harvest_from_account(
-            &ctx.accounts.token_mint,
-            token_account,
-            &ctx.accounts.vault_token_account,
-            &ctx.accounts.token_2022_program,
-            &vault_state.to_account_info(),
-            &ctx.bumps,
-        );
-        
-        match harvest_result {
-            Ok(amount) => {
-                total_harvested = total_harvested.saturating_add(amount);
-                accounts_processed += 1;
-                msg!("Harvested {} from {}", amount, account_pubkey);
-            },
-            Err(e) => {
-                msg!("Failed to harvest from {}: {:?}", account_pubkey, e);
-            }
+            total_harvested = withheld_amount;
+            msg!("Withdrew {} from mint to vault", total_harvested);
         }
     }
-    
-    msg!("Total harvested: {} from {} accounts", total_harvested, accounts_processed);
     
     if total_harvested > 0 {
         // Split the fees: 20% to owner (1% of 5%), 80% to treasury (4% of 5%)
@@ -195,20 +216,4 @@ pub fn handler(
     }
     
     Ok(())
-}
-
-fn harvest_from_account<'info>(
-    _mint: &AccountInfo<'info>,
-    _source_account: &AccountInfo<'info>,
-    _destination_account: &InterfaceAccount<'info, TokenAccount>,
-    _token_program: &Program<'info, Token2022>,
-    _authority: &AccountInfo<'info>,
-    _bumps: &std::collections::BTreeMap<String, u8>,
-) -> Result<u64> {
-    // This is a simplified version - in production, you would use
-    // the proper Token-2022 harvest instruction
-    
-    // For now, return 0 as we need the actual harvest CPI implementation
-    // which requires the withdraw withheld authority
-    Ok(0)
 }

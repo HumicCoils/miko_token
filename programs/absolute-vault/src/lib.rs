@@ -8,7 +8,7 @@ pub mod state;
 use instructions::*;
 use state::*;
 
-declare_id!("AbsV1111111111111111111111111111111111111111");
+declare_id!("DHzZjjPoRmbYvTsXE3Je1JW2M4qgkKsqsuTz3uKHh4qJ");
 
 #[program]
 pub mod absolute_vault {
@@ -25,8 +25,8 @@ pub mod absolute_vault {
 
     /// Harvest withheld fees from token accounts
     /// Collects fees from accounts not in the fee_exclusions list
-    pub fn harvest_fees(
-        ctx: Context<HarvestFees>,
+    pub fn harvest_fees<'info>(
+        ctx: Context<'_, '_, '_, 'info, HarvestFees<'info>>,
         accounts_to_harvest: Vec<Pubkey>,
     ) -> Result<()> {
         instructions::harvest_fees::handler(ctx, accounts_to_harvest)
@@ -34,8 +34,8 @@ pub mod absolute_vault {
 
     /// Distribute rewards to eligible holders
     /// Holders must have >= $100 worth of MIKO and not be in reward_exclusions list
-    pub fn distribute_rewards(
-        ctx: Context<DistributeRewards>,
+    pub fn distribute_rewards<'info>(
+        ctx: Context<'_, '_, '_, 'info, DistributeRewards<'info>>,
         holder_data: Vec<HolderData>,
     ) -> Result<()> {
         instructions::distribute_rewards::handler(ctx, holder_data)
@@ -71,8 +71,8 @@ pub mod absolute_vault {
 
     /// Emergency withdraw withheld fees from specific token accounts
     /// Authority-only function for recovering stuck fees
-    pub fn emergency_withdraw_withheld(
-        ctx: Context<EmergencyWithdrawWithheld>,
+    pub fn emergency_withdraw_withheld<'info>(
+        ctx: Context<'_, '_, '_, 'info, EmergencyWithdrawWithheld<'info>>,
         accounts_to_withdraw: Vec<Pubkey>,
     ) -> Result<()> {
         instructions::emergency_withdraw_withheld::handler(ctx, accounts_to_withdraw)
@@ -107,8 +107,8 @@ pub mod absolute_vault {
     }
 
     /// Harvest withheld tokens to mint without withdrawing
-    pub fn harvest_withheld_to_mint(
-        ctx: Context<HarvestWithheldToMint>,
+    pub fn harvest_withheld_to_mint<'info>(
+        ctx: Context<'_, '_, '_, 'info, HarvestWithheldToMint<'info>>,
         accounts_to_harvest: Vec<Pubkey>,
     ) -> Result<()> {
         instructions::emergency_withdraw_withheld::harvest_withheld_to_mint(ctx, accounts_to_harvest)

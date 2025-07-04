@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    token::{Token, TokenAccount as TokenAccountSpl},
-    token_2022::Token2022,
+    token::{self, Token, TokenAccount as TokenAccountSpl},
+    token_2022::{self, Token2022},
     token_interface::{TokenAccount, TokenInterface},
 };
 
@@ -170,7 +170,62 @@ pub fn emergency_withdraw_all(ctx: Context<EmergencyWithdrawAll>) -> Result<()> 
     };
     
     if balance > 0 {
-        handler(ctx.into(), balance)?;
+        msg!("Emergency withdrawal of all funds: {} tokens", balance);
+        
+        // Check if this is native SOL withdrawal
+        if ctx.accounts.token_mint.key() == System::id() {
+            // Withdraw native SOL
+            let vault_lamports = ctx.accounts.vault_token_account.lamports();
+            
+            require!(
+                vault_lamports >= balance,
+                VaultError::InsufficientBalance
+            );
+            
+            // Transfer SOL
+            **ctx.accounts.vault_token_account.try_borrow_mut_lamports()? -= balance;
+            **ctx.accounts.authority_token_account.try_borrow_mut_lamports()? += balance;
+            
+            msg!("Withdrew {} lamports (SOL)", balance);
+        } else {
+            // Withdraw SPL tokens
+            let is_token_2022 = ctx.accounts.token_mint.owner == &spl_token_2022::ID;
+            
+            let seeds = &[VAULT_SEED, &[ctx.accounts.vault_state.bump]];
+            let signer_seeds = &[&seeds[..]];
+            
+            if is_token_2022 {
+                token_2022::transfer_checked(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_2022_program.to_account_info(),
+                        token_2022::TransferChecked {
+                            from: ctx.accounts.vault_token_account.to_account_info(),
+                            to: ctx.accounts.authority_token_account.to_account_info(),
+                            authority: ctx.accounts.vault_state.to_account_info(),
+                            mint: ctx.accounts.token_mint.to_account_info(),
+                        },
+                        signer_seeds
+                    ),
+                    balance,
+                    9, // Decimals (MIKO token has 9 decimals)
+                )?;
+            } else {
+                token::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.to_account_info(),
+                        token::Transfer {
+                            from: ctx.accounts.vault_token_account.to_account_info(),
+                            to: ctx.accounts.authority_token_account.to_account_info(),
+                            authority: ctx.accounts.vault_state.to_account_info(),
+                        },
+                        signer_seeds
+                    ),
+                    balance,
+                )?;
+            }
+            
+            msg!("Withdrew {} tokens", balance);
+        }
     } else {
         msg!("No balance to withdraw");
     }

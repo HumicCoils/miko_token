@@ -94,7 +94,7 @@ pub struct InitializeSystemExclusions<'info> {
         init,
         payer = authority,
         space = ExclusionEntry::LEN,
-        seeds = [EXCLUSION_SEED, system_wallet.as_ref()],
+        seeds = [EXCLUSION_SEED, system_wallet.key().as_ref()],
         bump
     )]
     pub exclusion_entry: Account<'info, ExclusionEntry>,

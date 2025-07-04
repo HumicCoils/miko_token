@@ -3,8 +3,9 @@ use anchor_spl::{
     token_2022::{self, Token2022},
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
+// Import necessary modules
 use spl_token_2022::{
-    instruction::{withdraw_withheld_tokens_from_accounts, harvest_withheld_tokens_to_mint},
+    extension::{StateWithExtensions, BaseStateWithExtensions},
 };
 
 use crate::{
@@ -47,76 +48,78 @@ pub struct EmergencyWithdrawWithheld<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(
-    ctx: Context<EmergencyWithdrawWithheld>,
+pub fn handler<'info>(
+    ctx: Context<'_, '_, '_, 'info, EmergencyWithdrawWithheld<'info>>,
     accounts_to_withdraw: Vec<Pubkey>,
 ) -> Result<()> {
     require!(
-        accounts_to_withdraw.len() <= MAX_ACCOUNTS_PER_TX,
+        !accounts_to_withdraw.is_empty() && accounts_to_withdraw.len() <= MAX_ACCOUNTS_PER_TX,
         VaultError::TooManyAccounts
     );
-    
-    msg!("Emergency withdrawal of withheld fees from {} accounts", 
-        accounts_to_withdraw.len());
-    
-    // First, harvest all withheld tokens to the mint
-    let harvest_accounts = ctx.remaining_accounts.iter()
+
+    // 1. Harvest withheld tokens from the specified accounts to the mint.
+    let harvest_accounts_infos: Vec<AccountInfo> = ctx.remaining_accounts
+        .iter()
         .filter(|acc| accounts_to_withdraw.contains(&acc.key()))
-        .map(|acc| acc.to_account_info())
-        .collect::<Vec<_>>();
-        
-    if !harvest_accounts.is_empty() {
-        msg!("Harvesting withheld tokens from {} accounts to mint", 
-            harvest_accounts.len());
-            
-        // Build harvest instruction
-        let harvest_ix = harvest_withheld_tokens_to_mint(
+        .cloned()
+        .collect();
+    
+    if !harvest_accounts_infos.is_empty() {
+        let harvest_sources: Vec<Pubkey> = harvest_accounts_infos.iter().map(|acc| acc.key()).collect();
+        let harvest_sources_refs: Vec<&Pubkey> = harvest_sources.iter().collect();
+        let harvest_ix = spl_token_2022::extension::transfer_fee::instruction::harvest_withheld_tokens_to_mint(
             &spl_token_2022::ID,
             &ctx.accounts.token_mint.key(),
-            harvest_accounts.iter().map(|acc| acc.key).collect::<Vec<_>>().as_slice(),
+            &harvest_sources_refs,
         )?;
-        
-        // Execute harvest
+
+        // Build accounts for invoke
+        let mut invoke_accounts = vec![
+            ctx.accounts.token_2022_program.to_account_info(),
+            ctx.accounts.token_mint.to_account_info(),
+        ];
+        invoke_accounts.extend(harvest_accounts_infos.clone());
+
         solana_program::program::invoke(
             &harvest_ix,
-            &[
-                ctx.accounts.token_mint.to_account_info(),
-                ctx.accounts.token_2022_program.to_account_info(),
-            ],
+            &invoke_accounts,
         )?;
-        
-        msg!("Harvest complete");
+        msg!("Harvested withheld fees from {} accounts to mint.", harvest_accounts_infos.len());
     }
+
+    // 2. Withdraw all withheld tokens from the mint to the authority's account.
+    let mint_data = ctx.accounts.token_mint.try_borrow_data()?;
+    let mint_with_extension = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
     
-    // Now withdraw the harvested tokens from the mint to authority
-    msg!("Withdrawing harvested tokens from mint to authority");
-    
-    // Get the withdraw withheld authority (should be the same as the authority)
-    // In production, this would be the actual withdraw withheld authority from the mint
-    
-    // Build withdraw instruction
-    let withdraw_ix = withdraw_withheld_tokens_from_accounts(
-        &spl_token_2022::ID,
-        &ctx.accounts.token_mint.key(),
-        &ctx.accounts.authority_token_account.key(),
-        &ctx.accounts.authority.key(),
-        &[],
-        &[ctx.accounts.token_mint.key()],
-    )?;
-    
-    // Execute withdrawal
-    solana_program::program::invoke_signed(
-        &withdraw_ix,
-        &[
-            ctx.accounts.token_mint.to_account_info(),
-            ctx.accounts.authority_token_account.to_account_info(),
-            ctx.accounts.authority.to_account_info(),
-            ctx.accounts.token_2022_program.to_account_info(),
-        ],
-        &[],
-    )?;
-    
-    msg!("Emergency withdrawal of withheld fees complete");
+    // Get the transfer fee config extension to read withheld amount
+    if let Ok(fee_config) = mint_with_extension.get_extension::<spl_token_2022::extension::transfer_fee::TransferFeeConfig>() {
+        let total_withheld = u64::from(fee_config.withheld_amount);
+        
+        if total_withheld > 0 {
+            // The signer (`authority`) must be the mint's `withdraw_withheld_authority`.
+            let withdraw_ix = spl_token_2022::extension::transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
+                &spl_token_2022::ID,
+                &ctx.accounts.token_mint.key(),
+                &ctx.accounts.authority_token_account.key(),
+                &ctx.accounts.authority.key(), // The signer is the authority
+                &[],
+            )?;
+
+            solana_program::program::invoke_signed(
+                &withdraw_ix,
+                &[
+                    ctx.accounts.token_2022_program.to_account_info(),
+                    ctx.accounts.token_mint.to_account_info(),
+                    ctx.accounts.authority_token_account.to_account_info(),
+                    ctx.accounts.authority.to_account_info(),
+                ],
+                &[], // No PDA seeds needed since the authority is signing.
+            )?;
+            msg!("Withdrew {} withheld tokens to authority.", total_withheld);
+        } else {
+            msg!("No withheld tokens to withdraw from mint.");
+        }
+    }
     
     Ok(())
 }
@@ -145,8 +148,8 @@ pub struct HarvestWithheldToMint<'info> {
     pub token_2022_program: Program<'info, Token2022>,
 }
 
-pub fn harvest_withheld_to_mint(
-    ctx: Context<HarvestWithheldToMint>,
+pub fn harvest_withheld_to_mint<'info>(
+    ctx: Context<'_, '_, '_, 'info, HarvestWithheldToMint<'info>>,
     accounts_to_harvest: Vec<Pubkey>,
 ) -> Result<()> {
     require!(
@@ -158,10 +161,11 @@ pub fn harvest_withheld_to_mint(
         accounts_to_harvest.len());
     
     // Build harvest instruction
-    let harvest_ix = harvest_withheld_tokens_to_mint(
+    let harvest_sources: Vec<&Pubkey> = accounts_to_harvest.iter().collect();
+    let harvest_ix = spl_token_2022::extension::transfer_fee::instruction::harvest_withheld_tokens_to_mint(
         &spl_token_2022::ID,
         &ctx.accounts.token_mint.key(),
-        accounts_to_harvest.as_slice(),
+        &harvest_sources,
     )?;
     
     // Execute harvest
