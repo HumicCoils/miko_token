@@ -114,3 +114,8 @@ pub mod absolute_vault {
         instructions::emergency_withdraw_withheld::harvest_withheld_to_mint(ctx, accounts_to_harvest)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+}
