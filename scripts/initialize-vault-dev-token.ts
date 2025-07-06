@@ -18,8 +18,8 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import * as borsh from 'borsh';
 
-// Constants
-const VAULT_PROGRAM_ID = new PublicKey('DHzZjjPoRmbYvTsXE3Je1JW2M4qgkKsqsuTz3uKHh4qJ');
+// Constants - Using test vault program for Dev-Token
+const VAULT_PROGRAM_ID = new PublicKey('D1BorJSpZ2xGiopb4W3xyF5DBti3PRffbaDeQZUPF8Gi');
 const MIKO_DEV_TOKEN_MINT = new PublicKey('PBbVBUPWMzC2LVu4Qb51qJfpp6XfGjY5nCGJhoUWYUf');
 
 // Load wallet helper

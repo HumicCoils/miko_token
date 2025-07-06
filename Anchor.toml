@@ -5,11 +5,13 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-absolute_vault = "AbsV1111111111111111111111111111111111111111"
+absolute_vault = "DHzZjjPoRmbYvTsXE3Je1JW2M4qgkKsqsuTz3uKHh4qJ"
+absolute_vault_test = "EqubyYXhLs7TVwneLEHALKgmfKgA2AxajtjAhGfsfMha"
 smart_dial = "Dia11111111111111111111111111111111111111111"
 
 [programs.devnet]
-absolute_vault = "AbsV1111111111111111111111111111111111111111"
+absolute_vault = "DHzZjjPoRmbYvTsXE3Je1JW2M4qgkKsqsuTz3uKHh4qJ"
+absolute_vault_test = "EqubyYXhLs7TVwneLEHALKgmfKgA2AxajtjAhGfsfMha"
 smart_dial = "Dia11111111111111111111111111111111111111111"
 
 [registry]
