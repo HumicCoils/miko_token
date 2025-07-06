@@ -25,7 +25,9 @@ import { createHash } from 'crypto';
 
 // Constants
 const VAULT_PROGRAM_ID = new PublicKey('DHzZjjPoRmbYvTsXE3Je1JW2M4qgkKsqsuTz3uKHh4qJ');
-const MIKO_TOKEN_MINT = new PublicKey('H5KVrB48CTUVsQhYRULzEEZ5LCLxjJWCX7dHeLW4FVEw');
+// Using Dev-Token for testing (has mint authority retained)
+const MIKO_TOKEN_MINT = new PublicKey('PBbVBUPWMzC2LVu4Qb51qJfpp6XfGjY5nCGJhoUWYUf');
+// Using existing vault (vault can only be initialized once per program)
 const VAULT_PDA = new PublicKey('2udd79GB6eGPLZ11cBeSsKiDZnq3Zdksxx91kir5CJaf');
 
 // Helper to calculate instruction discriminator
