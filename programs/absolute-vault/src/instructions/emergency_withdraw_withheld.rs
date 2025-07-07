@@ -6,7 +6,8 @@ use anchor_spl::{
 };
 // Import necessary modules
 use spl_token_2022::{
-    extension::{StateWithExtensions, BaseStateWithExtensions},
+    extension::{StateWithExtensions, BaseStateWithExtensions, transfer_fee},
+    state::Mint as SplMint,
 };
 
 use crate::{
@@ -68,7 +69,7 @@ pub fn handler<'info>(
     if !harvest_accounts_infos.is_empty() {
         let harvest_sources: Vec<Pubkey> = harvest_accounts_infos.iter().map(|acc| acc.key()).collect();
         let harvest_sources_refs: Vec<&Pubkey> = harvest_sources.iter().collect();
-        let harvest_ix = spl_token_2022::extension::transfer_fee::instruction::harvest_withheld_tokens_to_mint(
+        let harvest_ix = transfer_fee::instruction::harvest_withheld_tokens_to_mint(
             &spl_token_2022::ID,
             &ctx.accounts.token_mint.key(),
             &harvest_sources_refs,
@@ -90,15 +91,15 @@ pub fn handler<'info>(
 
     // 2. Withdraw all withheld tokens from the mint to the authority's account.
     let mint_data = ctx.accounts.token_mint.try_borrow_data()?;
-    let mint_with_extension = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+    let mint_with_extension = StateWithExtensions::<SplMint>::unpack(&mint_data)?;
     
     // Get the transfer fee config extension to read withheld amount
-    if let Ok(fee_config) = mint_with_extension.get_extension::<spl_token_2022::extension::transfer_fee::TransferFeeConfig>() {
+    if let Ok(fee_config) = mint_with_extension.get_extension::<transfer_fee::TransferFeeConfig>() {
         let total_withheld = u64::from(fee_config.withheld_amount);
         
         if total_withheld > 0 {
             // The signer (`authority`) must be the mint's `withdraw_withheld_authority`.
-            let withdraw_ix = spl_token_2022::extension::transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
+            let withdraw_ix = transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
                 &spl_token_2022::ID,
                 &ctx.accounts.token_mint.key(),
                 &ctx.accounts.authority_token_account.key(),
@@ -163,7 +164,7 @@ pub fn harvest_withheld_to_mint<'info>(
     
     // Build harvest instruction
     let harvest_sources: Vec<&Pubkey> = accounts_to_harvest.iter().collect();
-    let harvest_ix = spl_token_2022::extension::transfer_fee::instruction::harvest_withheld_tokens_to_mint(
+    let harvest_ix = transfer_fee::instruction::harvest_withheld_tokens_to_mint(
         &spl_token_2022::ID,
         &ctx.accounts.token_mint.key(),
         &harvest_sources,

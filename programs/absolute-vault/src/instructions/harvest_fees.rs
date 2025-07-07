@@ -7,7 +7,8 @@ use anchor_spl::{
 };
 // Import necessary SPL Token 2022 modules
 use spl_token_2022::{
-    extension::{StateWithExtensions, BaseStateWithExtensions},
+    extension::{StateWithExtensions, BaseStateWithExtensions, transfer_fee},
+    state::Mint as SplMint,
 };
 
 use crate::{
@@ -96,7 +97,7 @@ pub fn handler<'info>(
         msg!("Harvesting withheld fees to mint...");
         
         let harvest_sources: Vec<&Pubkey> = accounts_to_harvest.iter().collect();
-        let harvest_ix = spl_token_2022::extension::transfer_fee::instruction::harvest_withheld_tokens_to_mint(
+        let harvest_ix = transfer_fee::instruction::harvest_withheld_tokens_to_mint(
             &spl_token_2022::ID,
             &ctx.accounts.token_mint.key(),
             &harvest_sources,
@@ -117,10 +118,10 @@ pub fn handler<'info>(
 
     // 2. Check the total amount of withheld fees now stored in the mint.
     let mint_data = ctx.accounts.token_mint.try_borrow_data()?;
-    let mint_with_extension = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+    let mint_with_extension = StateWithExtensions::<SplMint>::unpack(&mint_data)?;
     
     // Get the transfer fee config extension to read withheld amount
-    if let Ok(fee_config) = mint_with_extension.get_extension::<spl_token_2022::extension::transfer_fee::TransferFeeConfig>() {
+    if let Ok(fee_config) = mint_with_extension.get_extension::<transfer_fee::TransferFeeConfig>() {
         let withheld_amount = u64::from(fee_config.withheld_amount);
         msg!("Total withheld amount in mint: {}", withheld_amount);
 
@@ -130,7 +131,7 @@ pub fn handler<'info>(
             let seeds = &[VAULT_SEED, vault_state.token_mint.as_ref(), &[vault_state.bump]];
             let signer_seeds = &[&seeds[..]];
 
-            let withdraw_ix = spl_token_2022::extension::transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
+            let withdraw_ix = transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
                 &spl_token_2022::ID,
                 &ctx.accounts.token_mint.key(),
                 &ctx.accounts.vault_token_account.key(),
