@@ -16,7 +16,7 @@ use crate::{
 pub struct DistributeRewards<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,
@@ -145,7 +145,7 @@ pub fn handler<'info>(
             .ok_or(VaultError::InvalidHolderData)?;
             
         // Prepare PDA signer seeds.
-        let seeds = &[VAULT_SEED, &[vault_state.bump]];
+        let seeds = &[VAULT_SEED, vault_state.token_mint.as_ref(), &[vault_state.bump]];
         let signer_seeds = &[&seeds[..]];
         
         if is_token_2022 {

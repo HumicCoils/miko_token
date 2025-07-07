@@ -20,7 +20,7 @@ use crate::{
 pub struct HarvestFees<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,
@@ -127,7 +127,7 @@ pub fn handler<'info>(
         if withheld_amount > 0 {
             // 3. Withdraw the fees from the mint to the vault's token account.
             // The vault program PDA must be the `withdraw_withheld_authority` for the mint.
-            let seeds = &[VAULT_SEED, &[vault_state.bump]];
+            let seeds = &[VAULT_SEED, vault_state.token_mint.as_ref(), &[vault_state.bump]];
             let signer_seeds = &[&seeds[..]];
 
             let withdraw_ix = spl_token_2022::extension::transfer_fee::instruction::withdraw_withheld_tokens_from_mint(
@@ -166,7 +166,7 @@ pub fn handler<'info>(
         
         // Transfer to owner
         if owner_amount > 0 {
-            let seeds = &[VAULT_SEED, &[vault_state.bump]];
+            let seeds = &[VAULT_SEED, vault_state.token_mint.as_ref(), &[vault_state.bump]];
             let signer_seeds = &[&seeds[..]];
             
             token_2022::transfer_checked(
@@ -189,7 +189,7 @@ pub fn handler<'info>(
         
         // Transfer to treasury
         if treasury_amount > 0 {
-            let seeds = &[VAULT_SEED, &[vault_state.bump]];
+            let seeds = &[VAULT_SEED, vault_state.token_mint.as_ref(), &[vault_state.bump]];
             let signer_seeds = &[&seeds[..]];
             
             token_2022::transfer_checked(

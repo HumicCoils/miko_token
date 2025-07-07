@@ -21,7 +21,7 @@ pub struct Initialize<'info> {
         init,
         payer = authority,
         space = VaultState::LEN,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, token_mint.key().as_ref()],
         bump
     )]
     pub vault_state: Account<'info, VaultState>,
@@ -85,7 +85,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
 pub struct InitializeSystemExclusions<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,

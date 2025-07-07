@@ -18,7 +18,7 @@ use crate::{
 #[derive(Accounts)]
 pub struct EmergencyWithdrawWithheld<'info> {
     #[account(
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,
@@ -129,7 +129,7 @@ pub fn handler<'info>(
 #[derive(Accounts)]
 pub struct HarvestWithheldToMint<'info> {
     #[account(
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,

@@ -19,7 +19,7 @@ pub struct UpdateConfigParams {
 pub struct UpdateConfig<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,
@@ -80,7 +80,7 @@ pub fn handler(
 pub struct UpdateAuthority<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,

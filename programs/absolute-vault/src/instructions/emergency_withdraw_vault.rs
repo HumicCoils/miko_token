@@ -15,7 +15,7 @@ use crate::{
 pub struct EmergencyWithdrawVault<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,
@@ -76,7 +76,7 @@ pub fn handler(
         // Withdraw SPL tokens
         let is_token_2022 = ctx.accounts.token_mint.owner == &spl_token_2022::ID;
         
-        let seeds = &[VAULT_SEED, &[vault_state.bump]];
+        let seeds = &[VAULT_SEED, vault_state.token_mint.as_ref(), &[vault_state.bump]];
         let signer_seeds = &[&seeds[..]];
         
         if is_token_2022 {
@@ -124,7 +124,7 @@ pub fn handler(
 pub struct EmergencyWithdrawAll<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED],
+        seeds = [VAULT_SEED, vault_state.token_mint.as_ref()],
         bump = vault_state.bump
     )]
     pub vault_state: Account<'info, VaultState>,
