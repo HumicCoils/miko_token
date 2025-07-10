@@ -1,103 +1,82 @@
-# Node.js
+# Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.npm
-*.log
-logs/
+*/node_modules/
+*/*/node_modules/
 
-# TypeScript
-*.tsbuildinfo
+# Build outputs
+target/
+*/target/
+*/*/target/
 dist/
 build/
-out/
+*.so
 
-# Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.*
+# Docker volumes (large and not needed)
+docker/phase*/workspace/node_modules/
+docker/phase*/workspace/target/
+docker/phase*/workspace/*/node_modules/
+docker/phase*/workspace/*/target/
+docker/phase*/shared-artifacts/
 
-# Solana/Anchor
-target/
-.anchor
-**/*.rs.bk
-Cargo.lock
-test-ledger/
-.cache
+# Anchor
+.anchor/
+**/.anchor/
 
-# Wallet files
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys (security)
 *.json
 !package.json
 !tsconfig.json
 !Anchor.toml
+!miko-token-info.json
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Testing
-coverage/
-.nyc_output
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
-
-# Deployment artifacts
-deploy-config.json
-program-keypairs/
-
-# Generated documentation
-docs/
-
-# Python (for any scripts)
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-ENV/
-
-# Backup files
-*.backup
-*.bak
-
-# Log files
-logs/
+# Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
 
-# OS files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Test coverage
+coverage/
+.nyc_output/
 
-# Keeper bot specific
-keeper-bot/dist/
-keeper-bot/node_modules/
-keeper-bot/.env
+# Yarn
+yarn.lock
+.yarn/
 
-# Test artifacts
-test-results/
-.test-cache/
+# Cargo
+Cargo.lock
 
-# Build outputs
-/programs/*/target/
-*.so
+# Temporary files
+*.tmp
+*.temp
+.cache/
+tmp/
+
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# Large compiled files
+*.wasm
+*.dylib
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Misc
+*.bak
+*.orig

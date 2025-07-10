@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  phase1-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: miko-phase1
+    volumes:
+      # Mount the workspace directory
+      - ./workspace:/workspace
+      # Mount the shared artifacts directory
+      - ../shared-artifacts:/shared-artifacts
+      # Mount Solana config
+      - ~/.config/solana:/root/.config/solana
+    environment:
+      - RUST_BACKTRACE=1
+      - ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+      - ANCHOR_WALLET=/root/.config/solana/id.json
+    stdin_open: true
+    tty: true
+    networks:
+      - miko-network
+
+networks:
+  miko-network:
+    name: miko-network
+    driver: bridge
