@@ -1,68 +1,86 @@
 # MIKO Token Development Status
 
-## Current Phase: Phase 2 - Absolute Vault Program
+**Date**: July 13, 2025  
+**Phase**: Phase 1 - Core Programs Development  
+**Status**: BLOCKED
 
-## Status: BLOCKED
+## Summary
 
-### Critical Issue: Token-2022 Fee Harvesting Integration
+Development is currently blocked at the Docker environment setup stage for Phase 1 due to incompatible dependency versions between Rust, Solana CLI, and Anchor framework.
 
-The Absolute Vault Program cannot compile due to incompatibility between Anchor 0.30.1 and SPL Token-2022's fee harvesting mechanisms.
+## Current Progress
 
-### Specific Compilation Errors
+### Completed
+- ✅ Docker and Docker Compose installed and verified
+- ✅ Project directory structure created according to specifications
+- ✅ Docker volume mounting configuration for shared artifacts established
+- ✅ docker-compose.yml configured with all phases
+- ✅ Solana CLI 1.18.23 successfully installed in Docker using direct GitHub release download
 
-1. **Missing Token-2022 CPI Functions in Anchor**:
-   - `HarvestWithheldTokensToMint` struct not found
-   - `harvest_withheld_tokens_to_mint` function not found
-   - `WithdrawWithheldTokensFromAccounts` struct not found
-   - `withdraw_withheld_tokens_from_accounts` function not found
+### Blocked
+- ❌ Anchor CLI 0.30.1 installation failing due to Rust version compatibility issues
 
-2. **Type Compatibility Issues**:
-   - `TokenAccount` and `Mint` from `anchor_spl::token_interface` don't implement required traits
-   - Need to use `InterfaceAccount` wrapper but still have trait bound issues
+## Technical Issues Encountered
 
-### Impact on Core Functionality
+### 1. Circular Dependency Conflict
 
-These functions are CRITICAL for the MIKO token's tax mechanism:
-- **harvest_fees instruction**: Cannot collect the 5% transfer fees from token accounts
-- **emergency_withdraw_withheld instruction**: Cannot recover stuck fees
+We encountered a circular dependency problem between Rust versions and framework requirements:
 
-Without these working, the entire tax collection and distribution system fails.
+1. **Rust 1.75 Issue**: Initial attempt with Rust 1.75 failed because the AVM (Anchor Version Manager) uses `LazyLock`, which was only stabilized in Rust 1.80+. Error: `use of unstable library feature 'lazy_cell'`
 
-### Development Status
+2. **Rust 1.81 Issue**: After upgrading to Rust 1.81, Anchor 0.30.1 installation fails due to the `time` crate compatibility issue introduced in Rust 1.80. Error: `type annotations needed for Box<_>` in time-0.3.29
 
-#### Completed:
-- ✓ Phase 2 Docker container set up with Solana 1.18.23, Anchor 0.30.1
-- ✓ Basic SPL Token-2022 integration confirmed (token_2022 feature works)
-- ✓ Created vault state structures with multi-token support
-- ✓ Created instruction files (but they don't compile)
+3. **Cannot Downgrade**: Going back to Rust 1.79 or lower would recreate the original LazyLock issue
 
-#### Blocked:
-- ✗ Instructions do not compile due to Token-2022 CPI issues
-- ✗ Cannot proceed with PDA verification
-- ✗ Cannot build or deploy the program
-- ✗ Cannot test any functionality
+### 2. Root Cause Analysis
 
-### Root Cause Analysis
+The issue stems from:
+- Anchor 0.30.1 has locked dependencies that include `time` crate v0.3.29
+- Rust 1.80 introduced a breaking change in type inference that affects `time` crate versions < 0.3.35
+- The `--locked` flag in cargo install prevents updating the `time` crate to a compatible version
+- Pre-built binaries for Anchor 0.30.1 are not available (this feature was introduced in v0.31.0+)
 
-Anchor 0.30.1's `anchor-spl` crate does not expose the Token-2022 extension instructions needed for fee harvesting. The functions exist in the underlying `spl-token-2022` crate but are not wrapped by Anchor.
+### 3. Attempted Solutions
 
-### Attempted Solutions
-1. Used `anchor_spl::token_2022` - functions don't exist
-2. Tried importing `spl_token_2022::instruction` directly - still integration issues
-3. Changed types to `InterfaceAccount` - doesn't resolve all issues
+1. **Direct Solana Installation**: ✅ Successfully resolved by downloading binaries directly from GitHub releases
+2. **Cargo Install with Different Rust Versions**: ❌ Failed due to circular dependency
+3. **Search for Pre-built Anchor Binaries**: ❌ Not available for version 0.30.1
+4. **Alternative Installation Methods**: ❌ All require cargo compilation which hits the same issue
 
-### Options Forward
+## Potential Solutions (Not Yet Attempted)
 
-1. **Research Alternative Integration**: Find the correct way to call Token-2022 fee functions from Anchor
-2. **Direct CPI Without Anchor Wrapper**: Use raw Solana CPI to call Token-2022 instructions
-3. **Update Dependencies**: Try newer versions of Anchor that might have better Token-2022 support
+1. **Use Official Anchor Docker Image**: 
+   - Pull `solanafoundation/anchor:0.30.1` if it exists
+   - This would bypass the compilation issue entirely
 
-### Principles Maintained
-- Not simplifying or removing fee functionality
-- Not proceeding without working instructions
-- Documenting exact technical blockers
-- Maintaining requirement for full PRD-level functionality
+2. **Upgrade to Anchor 0.31.0+**:
+   - Newer versions have better Rust 1.80+ compatibility
+   - However, this deviates from the specified requirement of Anchor 0.30.1
+
+3. **Patch Anchor 0.30.1 Dependencies**:
+   - Fork Anchor 0.30.1 and update the `time` crate dependency
+   - Build from the forked version
+   - This is complex and may introduce other compatibility issues
+
+4. **Build Without --locked Flag**:
+   - Remove `--locked` to allow cargo to update dependencies
+   - Risk: May pull in incompatible versions of other dependencies
 
 ## Recommendation
 
-This is a fundamental compatibility issue that requires research into proper Token-2022 fee harvesting integration with Anchor. Cannot proceed with Phase 2 until this is resolved.
+The most pragmatic solution would be to use the official Anchor Docker image if available, or upgrade to a newer version of Anchor that has resolved these compatibility issues. The current combination of Anchor 0.30.1 with modern Rust versions appears to have fundamental compatibility problems that cannot be resolved without modifying the dependencies.
+
+## Next Steps
+
+1. Investigate if `solanafoundation/anchor:0.30.1` Docker image exists and is usable
+2. If not available, consider upgrading to Anchor 0.31.0 or newer
+3. Alternatively, consider using a complete development environment Docker image that has all tools pre-installed with compatible versions
+
+## Environment Details
+
+- Host OS: Linux 6.15.6-arch1-1
+- Docker: 28.3.0
+- Docker Compose: 2.38.2
+- Target Rust: 1.81 (attempted multiple versions)
+- Target Solana CLI: 1.18.23 (successfully installed)
+- Target Anchor: 0.30.1 (failed to install)

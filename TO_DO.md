@@ -1,163 +1,379 @@
-# MIKO Token Development Checklist - Docker-Based Approach
+# MIKO Token Development Checklist - Final Architecture
 
-## Core Principle
+## Core Development Principles
 
-Each development phase operates in an isolated Docker container with its own dependency environment. This prevents cross-phase contamination and allows independent progress even when dependency conflicts arise.
+1. **Programs First, Token Second**: Deploy programs to get IDs before creating token
+2. **Phase Isolation**: Each phase in separate Docker container
+3. **No Compromises**: Production-ready architecture with anti-sniper protection
+4. **Shared Artifacts**: Program IDs and critical data shared between phases
 
 ## Prerequisites
 
 ### Docker Environment Setup
-- [x] Install Docker and verify it works
-- [x] Set up project directory structure with docker/ subdirectory
-- [x] Create separate directories for each phase under docker/
-- [x] Understand volume mounting for sharing build artifacts
+- [ ] Install Docker and Docker Compose
+- [ ] Create project directory structure:
+  ```
+  miko-token/
+  ├── docker/
+  │   ├── phase1-programs/
+  │   ├── phase2-token/
+  │   ├── phase3-init/
+  │   ├── phase4-keeper/
+  │   └── shared-artifacts/
+  ├── PLAN.md
+  ├── TO_DO.md
+  └── README.md
+  ```
+- [ ] Understand volume mounting for artifact sharing
 
-## Phase 1: Foundation and Token Creation
+## Phase 1: Core Programs Development
 
-### Container Environment Goals
-- [x] Create a container with Rust, Solana CLI, and Anchor Framework
-- [x] Find a stable version combination that works together
-- [x] Document the working combination for reproducibility
+### Container Setup
+- [ ] Create Dockerfile with Rust 1.88.0, Solana 1.18.23, Anchor 0.30.1
+- [ ] Configure docker-compose.yml with shared-artifacts volume
+- [ ] Verify SPL Token-2022 dependencies work
 
-### Development Tasks
-- [x] Initialize Anchor workspace inside container
-- [x] Create and deploy MIKO token with 5% transfer fee
-- [x] Verify fee mechanism works correctly
-- [x] Revoke transfer fee authority to make it permanent
-- [x] Export token mint address and configuration
+### Absolute Vault Program Development
+- [ ] Initialize Anchor workspace for programs
+- [ ] Implement VaultState with:
+  - [ ] Multi-token support via mint-based PDA derivation
+  - [ ] Dual exclusion lists (fee_exclusions, reward_exclusions)
+  - [ ] Launch timestamp tracking
+  - [ ] Fee finalization flag
+  - [ ] Harvest threshold (500k MIKO)
+  - [ ] Emergency withdrawal capabilities
+  - [ ] Batch operation support
+  
+- [ ] Implement instructions with direct CPI:
+  - [ ] `initialize` - Set up vault with auto-exclusions
+  - [ ] `set_launch_time` - Record Raydium pool creation timestamp
+  - [ ] `update_transfer_fee` - Handle 30% → 15% → 5% transitions
+  - [ ] `harvest_fees` - Using spl_token_instruction::harvest_withheld_tokens_to_mint
+  - [ ] `distribute_rewards` - With SOL balance management
+  - [ ] `manage_exclusions` - Add/remove from lists
+  - [ ] `update_config` - Modify vault parameters
+  - [ ] `emergency_withdraw_vault` - Withdraw tokens/SOL
+  - [ ] `emergency_withdraw_withheld` - Recover stuck fees
 
-### Validation Criteria
-- [x] Token exists on devnet
-- [x] 5% fee is collected on transfers
-- [x] Fee cannot be changed (authority revoked)
-- [x] All deployment information is documented
+- [ ] Build and deploy:
+  ```bash
+  anchor build
+  anchor deploy --provider.cluster devnet
+  ```
 
-## Phase 2: Absolute Vault Program
+- [ ] Save deployment info:
+  ```json
+  {
+    "absoluteVaultProgramId": "...",
+    "deployedAt": "...",
+    "network": "devnet"
+  }
+  ```
 
-### Container Environment Goals
-- [x] Build on Phase 1 container or create new one
-- [x] Ensure SPL Token-2022 integration works
-- [x] Find dependency versions that allow multi-token vault compilation
+### Transfer Hook Program Development
+- [ ] Create separate Anchor program for transfer hooks
+- [ ] Implement TransferHookConfig with:
+  - [ ] Launch time storage
+  - [ ] Token mint reference
+  - [ ] Total supply tracking
+  
+- [ ] Implement hook logic:
+  - [ ] `initialize` - Set configuration
+  - [ ] `process_transfer` - Enforce 1% limit for 10 minutes
+  - [ ] Auto-deactivation after anti-sniper period
 
-### Development Tasks
-- [x] Implement vault state management with multi-token support
-- [ ] Create all required instructions (initialize, harvest, distribute, etc.) - BLOCKED: Token-2022 CPI functions not available in Anchor
-- [ ] Ensure PDA derivation includes token mint for isolation - BLOCKED: Cannot verify until compilation succeeds
-- [ ] Build and deploy the program successfully - BLOCKED by Token-2022 integration issues
+- [ ] Build, deploy, and save program ID
 
-### Testing Requirements
-- [ ] Deploy program to devnet
-- [ ] Initialize separate vaults for production and dev tokens
-- [ ] Verify fee harvesting functionality
-- [ ] Test reward distribution mechanism
-- [ ] Validate exclusion list management
-- [ ] Confirm emergency functions work
+### Smart Dial Program Development
+- [ ] Implement DialState with:
+  - [ ] Current reward token storage (default SOL)
+  - [ ] Launch timestamp for first Monday calculation
+  - [ ] Update history tracking
+  - [ ] 24-hour update constraint (after first Monday)
+  
+- [ ] Implement instructions:
+  - [ ] `initialize` - Set SOL as initial reward token
+  - [ ] `update_reward_token` - Change reward token (Monday only)
+  - [ ] `update_treasury` - Modify treasury wallet
+  - [ ] `get_current_config` - Read configuration
 
-### Critical Success Factors
-- [ ] Program compiles without dependency errors
-- [ ] Can create multiple vault instances (one per token)
-- [ ] All core features are testable with dev token
+- [ ] Build, deploy, and save program ID
 
-## Phase 3: Smart Dial Program
+### Validation
+- [ ] All three programs successfully deployed
+- [ ] Program IDs saved to shared-artifacts
+- [ ] No compilation errors with Token-2022 integration
 
-### Container Environment Goals
-- [ ] Use minimal dependencies (simpler than Phase 2)
-- [ ] Can reuse Phase 1 base container if compatible
+## Phase 2: MIKO Token Creation
 
-### Development Tasks
-- [ ] Implement dial state for reward token configuration
-- [ ] Create update mechanism with time constraints
-- [ ] Build treasury management functions
-- [ ] Deploy and initialize on devnet
+### Container Setup
+- [ ] Reuse Phase 1 container or create similar environment
+- [ ] Mount shared-artifacts to access program IDs
 
-### Testing Requirements
-- [ ] Verify reward token can be updated
-- [ ] Confirm 24-hour minimum between updates
-- [ ] Test authority controls
+### Token Creation Script Development
+- [ ] Create comprehensive token creation script that:
+  - [ ] Loads all program IDs from shared-artifacts
+  - [ ] Generates new mint keypair
+  - [ ] Calculates Vault PDA deterministically
+  - [ ] Creates mint with freeze authority null
+  - [ ] Sets Vault PDA as both fee authorities
+  - [ ] Initializes with 30% transfer fee (3000 basis points)
+  - [ ] Adds transfer hook extension
+  - [ ] Revokes mint authority immediately
+
+### Execution and Verification
+- [ ] Run token creation script
+- [ ] Verify token created with correct authorities:
+  ```
+  mintAuthority: null (revoked) ✓
+  freezeAuthority: null (never set) ✓
+  withdrawWithheldAuthority: Vault PDA ✓
+  transferFeeConfigAuthority: Vault PDA (temporary) ✓
+  transferHookAuthority: Vault PDA ✓
+  ```
+- [ ] Test 30% transfer fee collection
+- [ ] Test 1% transaction limit via hook
+- [ ] Save comprehensive token info to shared-artifacts
+
+## Phase 3: System Initialization
+
+### Container Setup
+- [ ] Create initialization environment
+- [ ] Access program IDs and token info from shared-artifacts
+
+### Vault Initialization
+- [ ] Create initialization script
+- [ ] Initialize vault with:
+  - [ ] Treasury wallet address
+  - [ ] Owner wallet address
+  - [ ] Minimum hold amount ($100 worth)
+  - [ ] Keeper wallet address
+  - [ ] Harvest threshold (500k MIKO)
+- [ ] Verify auto-exclusions applied:
+  - [ ] Owner wallet excluded
+  - [ ] Treasury excluded
+  - [ ] Keeper wallet excluded
+  - [ ] Vault program excluded
+  - [ ] Vault PDA excluded
+
+### Transfer Hook Initialization
+- [ ] Initialize with token mint and total supply
+- [ ] Set launch configuration
+- [ ] Verify 1% limit calculation correct
+
+### Smart Dial Initialization
+- [ ] Set initial reward token to SOL
+- [ ] Configure treasury wallet
+- [ ] Record initialization timestamp
+- [ ] Set update constraints
+
+### Launch Script Preparation
+- [ ] Create Raydium pool creation script
+- [ ] Add launch timestamp setter
+- [ ] Add fee update schedulers
+- [ ] Test in simulation mode
+
+### Testing
+- [ ] Test vault can harvest fees with PDA signature
+- [ ] Test dynamic fee updates work
+- [ ] Test transaction limits enforced
+- [ ] Verify exclusion lists work correctly
 
 ## Phase 4: Keeper Bot Development
 
-### Container Environment Goals
-- [ ] Node.js environment separate from Rust/Anchor
-- [ ] Include all necessary npm packages
-- [ ] Configure for API integrations
+### Container Setup
+- [ ] Create Node.js 20+ environment
+- [ ] Install TypeScript and required packages
+- [ ] NO WALLET PRIVATE KEYS in configuration
 
-### Development Tasks
-- [ ] Create modular architecture for bot components
-- [ ] Implement Twitter monitoring for token selection
-- [ ] Build fee harvesting automation
-- [ ] Integrate Jupiter for token swaps
-- [ ] Create distribution engine with Birdeye integration
-- [ ] Set up cron-based scheduling
+### Core Module Development
 
-### Testing Requirements
-- [ ] Each module works independently
-- [ ] Complete flow from harvest to distribution functions
-- [ ] API integrations handle errors gracefully
-- [ ] Meets 5-minute cycle requirement
+#### Fee Update Manager
+- [ ] Track launch timestamp
+- [ ] Schedule 5-minute update (30% → 15%)
+- [ ] Schedule 10-minute update (15% → 5%)
+- [ ] Implement fee finalization logic
+- [ ] Add authority revocation after 10 minutes
 
-## Phase 5: System Integration
+#### Twitter Monitor (Active after first Monday)
+- [ ] Calculate first Monday after launch
+- [ ] Implement Twitter API v2 integration
+- [ ] Parse @project_miko tweets for $SYMBOL mentions
+- [ ] Filter tweets from Monday 00:00-02:00 UTC
+- [ ] Extract mentioned tokens
 
-### Integration Environment Goals
-- [ ] Combine all components using Docker Compose
-- [ ] Create network for inter-container communication
-- [ ] Set up shared volumes for configuration
+#### Token Selector
+- [ ] Integrate Birdeye API
+- [ ] Default to SOL before first Monday
+- [ ] Compare 24h volumes for mentioned tokens
+- [ ] Select highest volume token
+- [ ] Update Smart Dial program
 
-### Integration Tasks
-- [ ] Define service dependencies correctly
-- [ ] Configure environment variables for each service
-- [ ] Create initialization scripts for full system startup
-- [ ] Implement health checks for each component
+#### Fee Harvester
+- [ ] Query all MIKO token accounts
+- [ ] Calculate total withheld fees
+- [ ] Monitor for 500k MIKO threshold
+- [ ] Batch accounts for efficient harvesting
+- [ ] Call vault's harvest_fees when threshold reached
+- [ ] Trigger swap and distribution after harvest
 
-### End-to-End Testing
-- [ ] Full system starts correctly
-- [ ] Programs deploy and initialize
-- [ ] Keeper bot connects to programs
-- [ ] Complete tax cycle works (collect → swap → distribute)
-- [ ] System handles various load scenarios
+#### Swap Manager
+- [ ] Integrate Jupiter API v6
+- [ ] Handle tax splitting (1% owner, 4% holders)
+- [ ] Manage SOL balance for keeper operations
+- [ ] Execute swaps with slippage protection
 
-## Phase 6: Production Preparation
+#### Distribution Engine
+- [ ] Query holders via Birdeye API
+- [ ] Calculate USD values for eligibility
+- [ ] Filter $100+ holders
+- [ ] Execute proportional distribution
 
-### Security Review Tasks
-- [ ] Audit all program authorities and access controls
-- [ ] Verify arithmetic operations are safe
-- [ ] Check for reentrancy vulnerabilities
-- [ ] Validate input parameters thoroughly
-- [ ] Review emergency function permissions
+### Scheduler Setup
+- [ ] One-time fee updates at 5 and 10 minutes
+- [ ] Monday 03:00 UTC: Check tweets (after first Monday)
+- [ ] Every minute: Check harvest threshold (500k MIKO)
+- [ ] Health monitoring and alerts
 
-### Documentation Requirements
-- [ ] Document all deployed program IDs
-- [ ] Create operational runbooks
-- [ ] Write troubleshooting guides
-- [ ] Prepare incident response procedures
+### Critical Validation
+- [ ] Bot operates without ANY private keys
+- [ ] All operations use program authorities
+- [ ] Launch-aware scheduling works
+- [ ] First Monday calculation correct
 
-## Phase 7: Mainnet Deployment
+## Phase 5: Integration Testing
+
+### Anti-Sniper Testing
+- [ ] Launch simulation test:
+  - [ ] Create pool and set timestamp
+  - [ ] Verify 30% initial tax active
+  - [ ] Test 1% transaction rejection
+  - [ ] Wait 5 minutes, verify 15% tax
+  - [ ] Wait 10 minutes, verify 5% tax
+  - [ ] Verify transaction limits removed
+  - [ ] Confirm fee authority revoked
+
+### Reward Token Testing
+- [ ] Verify SOL rewards from launch
+- [ ] Simulate first Monday arrival
+- [ ] Test AI token selection activation
+- [ ] Verify 24-hour constraint applies
+
+### Full System Testing
+- [ ] Complete tax cycle test:
+  - [ ] Create transfers to generate fees
+  - [ ] Monitor threshold accumulation
+  - [ ] Verify harvest triggers at 500k MIKO
+  - [ ] Fees split correctly (1%/4%)
+  - [ ] Rewards distributed proportionally
+
+### Scenario Testing
+- [ ] SOL reward token scenario
+- [ ] Non-SOL reward token scenario
+- [ ] Keeper SOL balance management
+- [ ] Large holder count (1000+)
+- [ ] API failure recovery
+
+### Security Testing
+- [ ] Verify all authorities:
+  - [ ] Mint authority null
+  - [ ] Freeze authority null
+  - [ ] Transfer fee locked after 10 min
+  - [ ] Hook still active but permissive
+
+### Performance Testing
+- [ ] Harvest 100+ accounts in one transaction
+- [ ] Distribution to 500+ holders
+- [ ] Threshold monitoring efficiency
+- [ ] Launch period load testing
+
+## Phase 6: Production Deployment
 
 ### Pre-deployment Checklist
-- [ ] All tests pass in devnet environment
-- [ ] Security concerns addressed
-- [ ] Production infrastructure ready
-- [ ] Monitoring and alerting configured
-- [ ] Backup procedures in place
+- [ ] All tests passing
+- [ ] Anti-sniper features verified
+- [ ] Security audit complete
+- [ ] Documentation finalized
+- [ ] Infrastructure ready
+- [ ] Monitoring configured
 
-### Deployment Process
-- [ ] Generate production keypairs securely
-- [ ] Deploy programs with correct configurations
-- [ ] Initialize systems with production parameters
-- [ ] Start keeper bot with monitoring
-- [ ] Verify first 24 hours of operation
+### Mainnet Deployment
+- [ ] Deploy programs in order:
+  1. [ ] Absolute Vault
+  2. [ ] Smart Dial
+  3. [ ] Transfer Hook
+- [ ] Create production token:
+  - [ ] 30% initial fee
+  - [ ] Freeze authority null
+  - [ ] Mint authority to revoke
+  - [ ] Hook enabled
+- [ ] Initialize all systems
+- [ ] Prepare launch sequence
 
-## Key Principles for Docker-Based Development
+### Launch Execution
+- [ ] Fund liquidity wallets
+- [ ] Create Raydium pool
+- [ ] Set launch timestamp immediately
+- [ ] Start keeper bot
+- [ ] Monitor fee updates:
+  - [ ] 5 min: 30% → 15%
+  - [ ] 10 min: 15% → 5% (permanent)
+- [ ] Verify anti-sniper protection active
+- [ ] Monitor first 24 hours
 
-1. **Isolation First**: Each phase has its own container to prevent conflicts
-2. **Version Discovery**: Find working combinations through experimentation
-3. **Documentation**: Record what works for each phase
-4. **Incremental Progress**: Move forward even if previous phases have issues
-5. **Flexibility**: Adapt container configurations as needed
+### Success Metrics
+- [ ] Snipers effectively deterred
+- [ ] Fee transitions executed on time
+- [ ] Zero manual interventions required
+- [ ] All fees harvested at threshold
+- [ ] Rewards distributed after each harvest
+- [ ] No security incidents
 
-## Success Metrics
+## Critical Checkpoints
 
-- Each phase can be built and tested independently
-- No single dependency conflict blocks entire project
-- Development can continue in parallel across phases
-- System works end-to-end despite build complexities
+Before proceeding to next phase, verify:
+
+**After Phase 1**:
+- Program IDs saved to shared-artifacts ✓
+- Transfer hook program deployed ✓
+- Direct CPI implementation working ✓
+
+**After Phase 2**:
+- Vault PDA is withdraw_withheld_authority ✓
+- Mint authority revoked ✓
+- Freeze authority null ✓
+- 30% initial fee active ✓
+
+**After Phase 3**:
+- Vault can harvest with PDA signature ✓
+- System accounts excluded ✓
+- Launch script ready ✓
+- SOL set as initial reward ✓
+
+**After Phase 4**:
+- Keeper bot has NO private keys ✓
+- Fee update scheduling works ✓
+- Threshold monitoring active ✓
+- First Monday logic implemented ✓
+- Automation fully working ✓
+
+## Common Issues and Solutions
+
+1. **Token-2022 CPI Issues**: Use direct invoke_signed
+2. **Authority Problems**: Always verify before proceeding
+3. **Launch Timing**: Set timestamp immediately after pool
+4. **Hook Failures**: Ensure proper initialization
+5. **Docker Networking**: Use shared-artifacts for data
+6. **Rate Limits**: Implement proper retry logic
+
+## Launch Day Checklist
+
+- [ ] All programs deployed and verified
+- [ ] Token created with 30% initial fee
+- [ ] Keeper bot running and monitoring
+- [ ] Launch script tested and ready
+- [ ] Team ready for launch sequence
+- [ ] Monitoring dashboard active
+- [ ] Emergency procedures documented
+
+This checklist ensures a perfect, production-ready implementation with robust anti-sniper protection and no compromises.

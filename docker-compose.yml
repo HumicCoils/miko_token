@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Phase 1: Core Programs Development
+  phase1-programs:
+    build:
+      context: ./docker/phase1-programs
+      dockerfile: Dockerfile
+    container_name: miko-phase1-programs
+    volumes:
+      # Mount shared artifacts for program ID storage
+      - ./docker/shared-artifacts:/shared-artifacts
+      # Mount workspace for development
+      - ./docker/phase1-programs/workspace:/workspace
+    environment:
+      - NETWORK=${NETWORK:-devnet}
+      - RPC_ENDPOINT=${RPC_ENDPOINT:-https://api.devnet.solana.com}
+    working_dir: /workspace
+    command: /bin/bash
+
+  # Phase 2: MIKO Token Creation
+  phase2-token:
+    build:
+      context: ./docker/phase2-token
+      dockerfile: Dockerfile
+    container_name: miko-phase2-token
+    volumes:
+      # Access program IDs from Phase 1
+      - ./docker/shared-artifacts:/shared-artifacts:ro
+      # Mount workspace
+      - ./docker/phase2-token/workspace:/workspace
+    environment:
+      - NETWORK=${NETWORK:-devnet}
+      - RPC_ENDPOINT=${RPC_ENDPOINT:-https://api.devnet.solana.com}
+    working_dir: /workspace
+    command: /bin/bash
+    depends_on:
+      - phase1-programs
+
+  # Phase 3: System Initialization
+  phase3-init:
+    build:
+      context: ./docker/phase3-init
+      dockerfile: Dockerfile
+    container_name: miko-phase3-init
+    volumes:
+      # Access artifacts from previous phases
+      - ./docker/shared-artifacts:/shared-artifacts:ro
+      # Mount workspace
+      - ./docker/phase3-init/workspace:/workspace
+    environment:
+      - NETWORK=${NETWORK:-devnet}
+      - RPC_ENDPOINT=${RPC_ENDPOINT:-https://api.devnet.solana.com}
+    working_dir: /workspace
+    command: /bin/bash
+    depends_on:
+      - phase2-token
+
+  # Phase 4: Keeper Bot
+  phase4-keeper:
+    build:
+      context: ./docker/phase4-keeper
+      dockerfile: Dockerfile
+    container_name: miko-phase4-keeper
+    volumes:
+      # Access all artifacts read-only
+      - ./docker/shared-artifacts:/shared-artifacts:ro
+      # Mount workspace
+      - ./docker/phase4-keeper/workspace:/workspace
+    environment:
+      - NETWORK=${NETWORK:-devnet}
+      - RPC_ENDPOINT=${RPC_ENDPOINT:-https://api.devnet.solana.com}
+      - KEEPER_PUBLIC_KEY=${KEEPER_PUBLIC_KEY}
+      - LAUNCH_TIMESTAMP=${LAUNCH_TIMESTAMP}
+      - HARVEST_THRESHOLD=${HARVEST_THRESHOLD:-500000000000}
+    working_dir: /workspace
+    command: /bin/bash
+    depends_on:
+      - phase3-init
+
+volumes:
+  shared-artifacts:
+    driver: local
+
+networks:
+  default:
+    name: miko-network

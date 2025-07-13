@@ -16,7 +16,11 @@ docker/phase*/workspace/node_modules/
 docker/phase*/workspace/target/
 docker/phase*/workspace/*/node_modules/
 docker/phase*/workspace/*/target/
-docker/phase*/shared-artifacts/
+
+# Keep shared artifacts structure but ignore generated files
+docker/shared-artifacts/*.json
+!docker/shared-artifacts/README.md
+!docker/shared-artifacts/.gitkeep
 
 # Anchor
 .anchor/
@@ -33,12 +37,12 @@ docker/phase*/shared-artifacts/
 .DS_Store
 Thumbs.db
 
-# Keys (security)
-*.json
-!package.json
-!tsconfig.json
-!Anchor.toml
-!miko-token-info.json
+# Keys (security - never commit)
+*-keypair.json
+id.json
+/wallets
+*.pem
+*.key
 
 # Logs
 *.log
@@ -67,6 +71,7 @@ tmp/
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # Large compiled files
 *.wasm
@@ -80,3 +85,17 @@ __pycache__/
 # Misc
 *.bak
 *.orig
+
+# Solana test ledger
+test-ledger/
+.cache
+
+# Keep important config files
+!docker-compose.yml
+!*/Dockerfile
+!scripts/*.sh
+!.gitignore
+!README.md
+!PLAN.md
+!TO_DO.md
+!DEVELOPMENT_STATUS.md

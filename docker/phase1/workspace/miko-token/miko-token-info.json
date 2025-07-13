@@ -1,9 +1,0 @@
-{
-  "mint": "GrPe8ph2F4LDWjx9ocjSENrL9kVygZuQf9iDzHc61GDv",
-  "decimals": 9,
-  "transferFeeBasisPoints": 500,
-  "transferFeePercentage": "5%",
-  "authority": "2JQFnYmaTAZX5b16UfuBDRSg3i5TuT22MsjHiNZwZpEm",
-  "createdAt": "2025-07-09T14:31:16.780Z",
-  "network": "devnet"
-}
