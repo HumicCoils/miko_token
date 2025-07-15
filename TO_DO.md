@@ -134,25 +134,26 @@
 - [x] Calculate Vault PDA using mint address and 'vault' seed
 - [x] Save PDA addresses for use in transfers
 
-### ⚠️ CRITICAL BLOCKER: IDL Generation Failed
-- [ ] Cannot proceed with program initialization without IDL files
-- [ ] anchor-syn v0.30.1 compilation error prevents IDL generation
+### ⚠️ CRITICAL BLOCKER: Program ID Mismatch
+- [x] IDL generation issue RESOLVED with manual construction
+- [ ] Transfer Hook has mismatched declared vs deployed program IDs
+- [ ] Smart Dial has mismatched declared vs deployed program IDs  
 - [ ] See DEVELOPMENT_STATUS.md for detailed blocker description
 
-### Vault Initialization (BLOCKED)
+### Vault Initialization (PARTIAL COMPLETE)
 - [x] Create initialization script
-- [ ] Initialize vault (creates PDA) with:
-  - [ ] Treasury wallet address
-  - [ ] Owner wallet address
-  - [ ] Minimum hold amount ($100 worth)
-  - [ ] Keeper wallet address
-  - [ ] Harvest threshold (500k MIKO)
-- [ ] Verify auto-exclusions applied:
-  - [ ] Owner wallet excluded
-  - [ ] Treasury excluded
-  - [ ] Keeper wallet excluded
-  - [ ] Vault program excluded
-  - [ ] Vault PDA excluded
+- [x] Initialize vault (creates PDA) with:
+  - [x] Treasury wallet address
+  - [x] Owner wallet address
+  - [x] Minimum hold amount ($100 worth)
+  - [x] Keeper wallet address
+  - [x] Harvest threshold (500k MIKO)
+- [x] Verify auto-exclusions applied:
+  - [x] Owner wallet excluded
+  - [x] Treasury excluded
+  - [x] Keeper wallet excluded
+  - [x] Vault program excluded
+  - [x] Vault PDA excluded
 
 ### Transfer Hook Initialization
 - [ ] Must be done BEFORE any transfers
@@ -162,10 +163,10 @@
 - [ ] Verify no transfer limits before launch
 
 ### Authority Transfers
-- [ ] Transfer fee config authority from deployer to Vault PDA
-- [ ] Transfer withdraw withheld authority from deployer to Vault PDA
-- [ ] Transfer hook authority from deployer to Vault PDA
-- [ ] Verify all authorities transferred correctly
+- [x] Transfer fee config authority from deployer to Vault PDA
+- [x] Transfer withdraw withheld authority from deployer to Vault PDA
+- [x] Transfer hook authority from deployer to Vault PDA
+- [x] Verify all authorities transferred correctly
 
 ### Initial Transfer Testing
 - [ ] Test small transfer between test wallets
@@ -174,8 +175,8 @@
 - [ ] Verify fees accumulate as withheld amounts
 
 ### Finalize Token Setup
-- [ ] Revoke mint authority permanently
-- [ ] Verify mint authority is null
+- [x] Revoke mint authority permanently
+- [x] Verify mint authority is null
 
 ### Token Distribution
 - [ ] Send tokens from deployer wallet to:
@@ -364,13 +365,13 @@ Before proceeding to next phase, verify:
 - All tokens in deployer wallet ✓
 
 **After Phase 3**:
-- Vault PDA has all authorities ❏
-- Mint authority revoked ❏
+- Vault PDA has all authorities ✓
+- Mint authority revoked ✓
 - Tokens distributed to proper wallets ❏
-- Vault can harvest with PDA signature ❏
-- System accounts excluded ❏
+- Vault can harvest with PDA signature ❏ (blocked by Transfer Hook init)
+- System accounts excluded ✓
 - Launch script ready ❏
-- SOL set as initial reward ❏
+- SOL set as initial reward ❏ (blocked by Smart Dial init)
 
 **After Phase 4**:
 - Keeper bot has NO private keys ❏

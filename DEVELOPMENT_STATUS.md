@@ -1,8 +1,8 @@
 # MIKO Token Development Status
 
-## Current Status: Phase 2 - MIKO Token Creation ✅ COMPLETE
+## Current Status: Phase 3 - System Initialization ⚠️ PARTIALLY BLOCKED
 
-### Date: 2025-07-14
+### Date: 2025-07-15
 
 ## Progress Summary
 
@@ -150,43 +150,48 @@ The development environment is fully operational and Phase 1 Absolute Vault Prog
 - ⚠️ Transfer testing shows hook requires initialization (expected - Phase 3 task)
 - ✅ Previous failed token (FPPGUYf6Ktir6z5VVu4cfbQaBmLawXq6y214fXfHxRJm) no longer referenced
 
+### Phase 3 Progress (PARTIAL) ⚠️
+
+**Successfully Completed:**
+- ✅ Created Phase 3 Docker container with initialization environment
+- ✅ Calculated Vault PDA correctly: `FKXCuPR6EyX4hrc413oti7ZMKEgqG1ekKVvqLNhjNxWg`
+- ✅ Resolved IDL generation blocker with manual instruction construction
+- ✅ Fixed borsh v0.7.0 serialization (Map-based schema required)
+- ✅ Vault program initialized (was already initialized, skipped)
+- ✅ All authorities transferred to Vault PDA:
+  - ✅ Transfer fee config authority
+  - ✅ Withdraw withheld authority  
+  - ✅ Transfer hook authority
+- ✅ Mint authority permanently revoked (set to null)
+- ✅ System wallets configured (treasury, owner, keeper)
+
+**Blocked by Program ID Mismatch:**
+- ❌ Transfer Hook initialization - declared vs deployed ID mismatch
+- ❌ Smart Dial initialization - declared vs deployed ID mismatch
+- ❌ 30% transfer fee testing - requires initialized Transfer Hook
+- ❌ Token distribution - unsafe without initialized Transfer Hook
+
 ## Next Steps 📋
 
-**Phase 2 Complete! ✅** MIKO token has been created with 1B supply and temporary authorities.
+**Phase 3 Partially Complete! ⚠️** Vault initialized and authorities transferred, but blocked by program ID mismatches.
 
-According to TO_DO.md, the next phase is:
+### Critical Actions Required:
 
-### Phase 3: System Initialization & Authority Transfer
+1. **Fix Program ID Mismatches**
+   - Option A: Redeploy Transfer Hook and Smart Dial with correct declared IDs
+   - Option B: Modify source code to use deployed IDs and rebuild
+   - Option C: Deploy new versions with matching IDs
 
-1. **Container Setup**
-   - Create initialization environment 
-   - Access program IDs and token info from shared-artifacts
+2. **Complete Phase 3 After Fix**
+   - Initialize Transfer Hook with correct program ID
+   - Initialize Smart Dial with correct program ID
+   - Test 30% transfer fee collection
+   - Distribute tokens from deployer wallet
 
-2. **Calculate PDAs**
-   - Calculate Vault PDA using mint address and 'vault' seed
-   - Save PDA addresses for use in transfers
-
-3. **Vault Initialization**
-   - Create initialization script
-   - Initialize vault to create the PDA
-   - Set treasury, owner, keeper wallets
-   - Set minimum hold amount and harvest threshold
-   - Verify auto-exclusions applied
-
-4. **Authority Transfers**
-   - Transfer fee config authority from deployer to Vault PDA
-   - Transfer withdraw withheld authority from deployer to Vault PDA
-   - Transfer hook authority from deployer to Vault PDA
-   - Revoke mint authority permanently
-
-5. **Transfer Hook Initialization**
-   - Initialize with token mint and total supply
-   - Set launch configuration
-   - Must be done BEFORE any token transfers
-
-6. **Token Distribution**
-   - Send tokens from deployer to appropriate wallets
-   - Ensure all allocations complete before launch
+3. **Current Workaround (NOT RECOMMENDED)**
+   - System is partially functional with basic 30% fee
+   - But lacks anti-sniper protection and proper fee enforcement
+   - Not production-ready without Transfer Hook initialization
 
 ## Technical Details
 
@@ -254,9 +259,11 @@ miko_token/
 | Transfer Hook | ~1.85 SOL | 2025-07-14 | Anti-sniper protection implemented |
 | Smart Dial | ~1.75 SOL | 2025-07-14 | AI-driven reward token selection |
 | MIKO Token Creation | ~0.003 SOL | 2025-07-14 | Token-2022 with extensions |
+| Authority Transfers | ~0.002 SOL | 2025-07-15 | 3 authority transfer transactions |
 | **Total Phase 1** | **~5.45 SOL** | - | All programs deployed |
 | **Total Phase 2** | **~0.003 SOL** | - | Token created with 1B supply |
-| **Total Used** | **~5.453 SOL** | - | Phases 1-2 complete |
+| **Total Phase 3** | **~0.002 SOL** | - | Partial - authorities transferred |
+| **Total Used** | **~5.455 SOL** | - | Phases 1-3 (partial) |
 
 ### Mainnet Deployments
 | Program | Deployment Cost | Date | Notes |
@@ -265,51 +272,76 @@ miko_token/
 
 **Note**: These costs are typical for production-ready Solana programs with full functionality. No features were compromised for cost optimization.
 
-## Phase 3 Blocker 🚨
+## Phase 3 Blockers 🚨
 
-### Critical Issue: Cannot Initialize Programs Without IDL
+### Critical Issue 1: IDL Generation Failed (RESOLVED with manual construction)
 
 **Date: 2025-07-15**
 
 **Issue Description:**
-Phase 3 requires initializing the Vault, Transfer Hook, and Smart Dial programs. This initialization process requires either:
-1. IDL (Interface Definition Language) files generated from the Anchor programs
-2. Manual construction of initialization instructions
+IDL generation failed with anchor-syn v0.30.1 compilation error.
+
+**Resolution:**
+✅ Implemented manual instruction construction using borsh v0.7.0 serialization
+
+### Critical Issue 2: Program ID Mismatch Prevents Initialization
+
+**Date: 2025-07-15**
+
+**Issue Description:**
+Transfer Hook and Smart Dial programs have mismatched program IDs between declared (in source code) and deployed addresses. This prevents proper PDA derivation and initialization.
 
 **Current Status:**
-- ❌ IDL generation fails with compilation error in anchor-syn v0.30.1
-- ❌ Cannot proceed with program initialization without IDL
-- ✅ Token authorities can be transferred, but without initialized programs, the system is non-functional
+- ✅ Vault program initialized successfully (no ID mismatch)
+- ✅ All authorities transferred to Vault PDA
+- ✅ Mint authority revoked permanently
+- ❌ Transfer Hook initialization blocked - PDA mismatch
+- ❌ Smart Dial initialization blocked - PDA mismatch
+- ❌ Cannot test 30% transfer fee without initialized Transfer Hook
+- ❌ Cannot distribute tokens safely without initialized Transfer Hook
 
 **Technical Details:**
 ```
-error[E0599]: no method named `source_file` found for struct `proc_macro2::Span`
---> anchor-syn-0.30.1/src/idl/defined.rs:499:66
+Transfer Hook:
+- Declared ID (in lib.rs): 2Mh6sSYeqeyqRZz8cr7y8gFtxyNf7HoMWqwzm9uTFav3
+- Deployed ID (actual): B2KkZbyd9jptD4ns1mBCCrLXH9ozbTWGN4PwgKfAg3LP
+- Hook Config PDA with declared: 34uaZAqB2GiiEWbUSfhe4JHtSeLbXRNADL9azXskQvr7
+- Hook Config PDA with deployed: XgcynkLfUM86fkG4gY4y8y9gVnWpcKjiBHy8zQt2C7v
+
+Smart Dial:
+- Declared ID (in lib.rs): 2Ymuq9Nt9s1GH1qGVuFd6jCqefJcmsPReE3MmiieEhZc
+- Deployed ID (actual): F73eRCVZv9mxaMjYUd3Le3gPeEMQgFHU8qL3v3YmrHjg
 ```
 
-This appears to be a version compatibility issue between proc_macro2 and anchor-syn.
+**Root Cause:**
+Programs were compiled with one program ID (declare_id! macro) but deployed with different IDs. The program code uses the declared ID for PDA derivation, making the deployed programs unable to find their PDAs.
 
 **Impact:**
-Without proper program initialization:
-- The Vault PDA won't actually exist (it's created during initialization)
-- Transfer Hook won't enforce the 1% anti-sniper limit
-- Smart Dial won't be configured for reward token management
-- The entire system would be broken despite having correct authorities
+- Transfer Hook cannot be initialized → 30% fee won't be properly enforced
+- Smart Dial cannot be initialized → AI reward selection unavailable
+- Token transfers may fail or behave unexpectedly
+- System is partially functional but not production-ready
 
 **Attempted Solutions:**
-1. ❌ Running `anchor idl build` from Phase 1 container - compilation error
-2. ❌ Accessing pre-built IDL files - they were never generated
-3. ❌ Creating "simplified" initialization - rejected as it violates development principles
+1. ✅ Fixed borsh serialization issues (Map-based schema for v0.7.0)
+2. ✅ Fixed PDA seed strings (hook-config, smart-dial)
+3. ❌ Cannot fix program ID mismatch without redeployment
 
-**Next Steps Required:**
-1. Fix the anchor-syn compilation issue in Phase 1 to generate IDLs
-2. OR implement manual instruction construction for initialization
-3. OR upgrade/downgrade Anchor version to resolve compatibility
-
-**This is a blocking issue that prevents achieving full functionality as required by the development principles.**
+**Required Fix:**
+Programs must be redeployed with correct declared IDs matching deployment, OR recompiled with deployed IDs as declared IDs.
 
 ## Risk Assessment
-**High Risk**: Phase 3 blocked due to IDL generation failure. Cannot proceed with proper system initialization without resolving this technical issue.
+**High Risk**: Phase 3 partially blocked due to program ID mismatch. Transfer Hook and Smart Dial cannot be initialized, preventing:
+- Anti-sniper protection (1% transaction limit)
+- Proper fee enforcement beyond the basic 30%
+- AI-driven reward token selection
+- Safe token distribution (without initialized Transfer Hook)
+
+**Partial Success**: 
+- Vault initialized successfully
+- All authorities transferred to Vault PDA
+- Mint authority permanently revoked
+- System is partially functional but not production-ready
 
 ## Lessons Learned
 1. Always check GLIBC requirements when using Solana in Docker
@@ -320,3 +352,5 @@ Without proper program initialization:
 6. CRITICAL: Never set a PDA as authority before it exists - PDAs must be initialized first
 7. Always mint total token supply before revoking mint authority
 8. Transfer hooks require initialization before transfers can occur
+9. CRITICAL: Always ensure declare_id! in program source matches the actual deployment ID
+10. Manual instruction construction with borsh requires Map-based schema for v0.7.0

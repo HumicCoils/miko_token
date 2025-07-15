@@ -20,5 +20,22 @@
   "createdAt": "2025-07-14T16:13:38.866Z",
   "network": "devnet",
   "mintSecretKey": "5Qr9EaFs38F1Ttp1n9t11yNqDy4xPgi5hHHv9zhn2jytUvNsxJ1bFpjd7hxVtw22nmpk1rScMQsxuU6gvcNoRUrS",
-  "phase": "Phase 2 Complete - Awaiting Phase 3 for authority transfers"
+  "phase": "Phase 3 Partial - Vault initialized, authorities transferred, mint revoked. Transfer Hook and Smart Dial blocked by program ID mismatches",
+  "vaultPda": "FKXCuPR6EyX4hrc413oti7ZMKEgqG1ekKVvqLNhjNxWg",
+  "vaultInitialized": true,
+  "transferHookInitialized": false,
+  "smartDialInitialized": false,
+  "authorities": {
+    "mintAuthority": null,
+    "freezeAuthority": null,
+    "transferFeeConfigAuthority": "FKXCuPR6EyX4hrc413oti7ZMKEgqG1ekKVvqLNhjNxWg",
+    "withdrawWithheldAuthority": "FKXCuPR6EyX4hrc413oti7ZMKEgqG1ekKVvqLNhjNxWg",
+    "transferHookAuthority": "FKXCuPR6EyX4hrc413oti7ZMKEgqG1ekKVvqLNhjNxWg"
+  },
+  "systemWallets": {
+    "treasury": "AxbjsdedZ3VUgQacyqHGKFDH3VK3nehHZGjA5NHwcBGs",
+    "owner": "AxbjsdedZ3VUgQacyqHGKFDH3VK3nehHZGjA5NHwcBGs",
+    "keeper": "AxbjsdedZ3VUgQacyqHGKFDH3VK3nehHZGjA5NHwcBGs"
+  },
+  "updatedAt": "2025-07-15T06:49:33.248Z"
 }
