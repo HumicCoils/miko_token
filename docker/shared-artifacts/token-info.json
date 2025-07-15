@@ -1,0 +1,24 @@
+{
+  "mint": "9tBdY18t35LMGqzNbzbqNyKYm7b4cmWx6AzYvSKR9BuG",
+  "decimals": 9,
+  "totalSupply": "1000000000",
+  "totalSupplyRaw": "1000000000000000000",
+  "temporaryAuthority": "AxbjsdedZ3VUgQacyqHGKFDH3VK3nehHZGjA5NHwcBGs",
+  "deployerTokenAccount": "Gsj8EYTeRTovVYEPdU9qU4o5CcS3wKYqosLWALttMVA3",
+  "futureVaultPda": "FKXCuPR6EyX4hrc413oti7ZMKEgqG1ekKVvqLNhjNxWg",
+  "vaultBump": 254,
+  "transferFeeConfig": {
+    "feeBasisPoints": 3000,
+    "maximumFee": "10000",
+    "temporaryConfigAuthority": "AxbjsdedZ3VUgQacyqHGKFDH3VK3nehHZGjA5NHwcBGs",
+    "temporaryWithdrawAuthority": "AxbjsdedZ3VUgQacyqHGKFDH3VK3nehHZGjA5NHwcBGs"
+  },
+  "transferHook": {
+    "programId": "B2KkZbyd9jptD4ns1mBCCrLXH9ozbTWGN4PwgKfAg3LP",
+    "temporaryAuthority": "AxbjsdedZ3VUgQacyqHGKFDH3VK3nehHZGjA5NHwcBGs"
+  },
+  "createdAt": "2025-07-14T16:13:38.866Z",
+  "network": "devnet",
+  "mintSecretKey": "5Qr9EaFs38F1Ttp1n9t11yNqDy4xPgi5hHHv9zhn2jytUvNsxJ1bFpjd7hxVtw22nmpk1rScMQsxuU6gvcNoRUrS",
+  "phase": "Phase 2 Complete - Awaiting Phase 3 for authority transfers"
+}

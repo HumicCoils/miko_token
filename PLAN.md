@@ -20,7 +20,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
    - Launch timestamp tracking
    - Dynamic fee update mechanism
    - Holder registry management
-   - Reward distribution mechanics
+   - Reward distribution mechanics (20% owner/80% holders split)
    - Dual exclusion list management
    - Emergency withdrawal capabilities
 
@@ -39,25 +39,26 @@ This document outlines the comprehensive development plan for the MIKO token sys
    - Automated monitoring with threshold-based execution
    - Tax rate updates at 5 and 10 minute marks
    - Harvest trigger: 500,000 MIKO accumulated (0.05% of supply)
-   - Twitter API integration for AI token selection (after first Monday)
+   - Pinned tweet monitoring for reward token selection (after first Monday)
+   - Symbol disambiguation via 24h volume comparison
    - Jupiter swap integration
-   - Birdeye API integration for holder data
+   - Birdeye API integration for holder data and token volumes
    - No wallet private key required
 
 ## Technical Stack
 
 ### On-chain Development
-- **Language**: Rust 1.75+
-- **Framework**: Anchor 0.30.1
+- **Language**: Rust (latest stable)
+- **Framework**: Anchor framework
 - **Token Standard**: SPL Token-2022 with extensions
-- **Program Development**: Solana CLI 1.18+
+- **Program Development**: Solana CLI
 
 ### Off-chain Development
-- **Language**: TypeScript 5.0+
-- **Runtime**: Node.js 20+
-- **Web3 Library**: @solana/web3.js 1.91+
-- **Scheduler**: node-cron
-- **APIs**: Twitter API v2, Birdeye API, Jupiter API v6
+- **Language**: TypeScript
+- **Runtime**: Node.js LTS
+- **Web3 Library**: @solana/web3.js
+- **Scheduler**: cron job library
+- **APIs**: Twitter API v2, Birdeye API, Jupiter API
 
 ### Infrastructure
 - **Containerization**: Docker & Docker Compose
@@ -118,94 +119,49 @@ This document outlines the comprehensive development plan for the MIKO token sys
 **Objective**: Develop and deploy on-chain programs with anti-sniper features
 
 #### Environment Setup
-```dockerfile
-FROM rust:1.75
-# Install Solana 1.18.23, Anchor 0.30.1
-# Mount volumes: ./workspace:/workspace, ../shared-artifacts:/artifacts
-```
+- Use appropriate Rust base image
+- Install Solana tools and Anchor framework
+- Mount volumes for workspace and shared artifacts
 
 #### Absolute Vault Program
 
 1. **Data Structures**:
-   ```rust
-   pub struct VaultState {
-       pub authority: Pubkey,           // Admin authority
-       pub treasury: Pubkey,            // Treasury wallet
-       pub owner_wallet: Pubkey,        // Owner (1% recipient)
-       pub token_mint: Pubkey,          // MIKO token mint
-       pub min_hold_amount: u64,        // Min $100 USD in tokens
-       pub fee_exclusions: Vec<Pubkey>, // Fee harvest exclusions
-       pub reward_exclusions: Vec<Pubkey>, // Reward exclusions
-       pub keeper_authority: Pubkey,    // Keeper bot authority
-       pub launch_timestamp: i64,       // Raydium pool creation time
-       pub fee_finalized: bool,         // Tax locked at 5%
-       pub harvest_threshold: u64,      // 500,000 MIKO (0.05% of supply)
-       // ... statistics fields
-   }
-   ```
+   - VaultState struct containing:
+     - authority: Admin authority
+     - treasury: Treasury wallet
+     - owner_wallet: Owner (1% recipient)
+     - token_mint: MIKO token mint
+     - min_hold_amount: Min $100 USD in tokens
+     - fee_exclusions: Fee harvest exclusions list
+     - reward_exclusions: Reward exclusions list
+     - keeper_authority: Keeper bot authority
+     - launch_timestamp: Raydium pool creation time
+     - fee_finalized: Tax locked at 5% flag
+     - harvest_threshold: 500,000 MIKO (0.05% of supply)
+     - Additional statistics fields
 
 2. **Launch Time Management**:
-   ```rust
-   pub fn set_launch_time(ctx: Context<SetLaunchTime>) -> Result<()> {
-       let vault = &mut ctx.accounts.vault;
-       require!(
-           vault.launch_timestamp == 0,
-           ErrorCode::AlreadyLaunched
-       );
-       vault.launch_timestamp = Clock::get()?.unix_timestamp;
-       Ok(())
-   }
-   ```
+   - Implement set_launch_time function
+   - Require launch_timestamp to be unset (zero)
+   - Set current timestamp when Raydium pool is created
+   - Return error if already launched
 
 3. **Dynamic Fee Updates**:
-   ```rust
-   pub fn update_transfer_fee(ctx: Context<UpdateTransferFee>) -> Result<()> {
-       let vault = &mut ctx.accounts.vault;
-       let clock = Clock::get()?;
-       let elapsed = clock.unix_timestamp - vault.launch_timestamp;
-       
-       let new_fee = match elapsed {
-           0..=300 => 3000,      // 0-5 min: 30%
-           301..=600 => 1500,    // 5-10 min: 15%
-           _ => {
-               // 10+ min: 5% forever
-               if !vault.fee_finalized {
-                   update_fee_to_5_percent()?;
-                   revoke_fee_authority()?;
-                   vault.fee_finalized = true;
-               }
-               return Ok(());
-           }
-       };
-       
-       update_transfer_fee_cpi(new_fee)?;
-       Ok(())
-   }
-   ```
+   - Implement update_transfer_fee function
+   - Calculate elapsed time since launch
+   - Apply fee schedule:
+     - 0-5 minutes: 30% (3000 basis points)
+     - 5-10 minutes: 15% (1500 basis points)
+     - 10+ minutes: 5% (500 basis points) and revoke authority
+   - Update fee via CPI to Token-2022 program
+   - Set fee_finalized flag when complete
 
 4. **Instructions with Direct CPI**:
-   ```rust
-   // harvest_fees.rs - Direct CPI implementation
-   use spl_token_2022::instruction as spl_instruction;
-   
-   pub fn handler(ctx: Context<HarvestFees>) -> Result<()> {
-       let vault_seeds = &[VAULT_SEED, vault.token_mint.as_ref(), &[vault.bump]];
-       
-       // Build instruction manually
-       let harvest_ix = spl_instruction::harvest_withheld_tokens_to_mint(
-           &spl_token_2022::ID,
-           &ctx.accounts.token_mint.key(),
-           &ctx.remaining_accounts.iter().map(|a| a.key).collect::<Vec<_>>(),
-       )?;
-       
-       // Execute with invoke_signed
-       invoke_signed(
-           &harvest_ix,
-           &[/* accounts */],
-           &[vault_seeds],
-       )?;
-   }
-   ```
+   - harvest_fees: Direct CPI implementation to Token-2022
+     - Use SPL Token-2022's harvest_withheld_tokens_to_mint instruction
+     - Build instruction with token mint and account list
+     - Execute with PDA signature using invoke_signed
+     - Process accounts in batches for efficiency
 
 5. **Authority Design**:
    - `authority`: Program admin (can update configs)
@@ -215,352 +171,231 @@ FROM rust:1.75
 #### Transfer Hook Program
 
 1. **Transaction Limit Enforcement**:
-   ```rust
-   pub struct TransferHookConfig {
-       pub launch_time: i64,
-       pub token_mint: Pubkey,
-       pub total_supply: u64,
-   }
-   
-   pub fn process_transfer(
-       ctx: Context<TransferHook>,
-       amount: u64,
-   ) -> Result<()> {
-       let config = &ctx.accounts.config;
-       let clock = Clock::get()?;
-       
-       // 10 minute anti-sniper period
-       if clock.unix_timestamp < config.launch_time + 600 {
-           let max_allowed = config.total_supply / 100; // 1%
-           require!(
-               amount <= max_allowed,
-               ErrorCode::ExceedsMaxTransaction
-           );
-       }
-       
-       Ok(())
-   }
-   ```
+   - Create TransferHookConfig struct with:
+     - launch_time field (initially 0)
+     - token_mint reference
+     - total_supply tracking
+   - Implement process_transfer function:
+     - Check if launch_time is set (non-zero)
+     - If set and within 10 minute anti-sniper period:
+       - Calculate 1% of total supply as max allowed
+       - Reject transfers exceeding limit
+     - If launch_time not set or after 10 minutes:
+       - Allow unlimited transfers
+   - Note: Hook is active immediately but only enforces limits after launch_time is set
 
 #### Smart Dial Program
 
 1. **Simple State Management**:
-   ```rust
-   pub struct DialState {
-       pub authority: Pubkey,
-       pub current_reward_token: Pubkey,
-       pub last_update: i64,
-       pub update_history: Vec<UpdateRecord>,
-       pub launch_timestamp: i64,  // For first Monday calculation
-   }
-   ```
+   - Implement DialState with:
+     - authority field
+     - current_reward_token storage
+     - last_update timestamp
+     - update_history tracking
+     - launch_timestamp for first Monday calculation
 
 2. **24-hour Update Constraint** (active after first Monday):
-   ```rust
-   require!(
-       clock.unix_timestamp >= dial.last_update + 86400,
-       DialError::UpdateTooSoon
-   );
-   ```
+   - Require 86400 seconds (24 hours) between updates
+   - Return error if update attempted too soon
 
 ### Phase 2: MIKO Token Creation (Week 4)
-**Objective**: Create token with proper authority structure and anti-sniper configuration
+**Objective**: Create token with temporary authority structure
 
 1. **Load Program IDs**:
-   ```typescript
-   const programs = JSON.parse(
-     fs.readFileSync('/artifacts/programs.json', 'utf-8')
-   );
-   const VAULT_PROGRAM_ID = new PublicKey(programs.absoluteVault.programId);
-   const HOOK_PROGRAM_ID = new PublicKey(programs.transferHook.programId);
-   ```
+   - Read programs.json from shared-artifacts
+   - Parse and extract all program IDs
+   - Convert to PublicKey objects
 
-2. **Calculate PDAs**:
-   ```typescript
-   const [vaultPDA, vaultBump] = PublicKey.findProgramAddressSync(
-     [Buffer.from('vault'), mintKeypair.publicKey.toBuffer()],
-     VAULT_PROGRAM_ID
-   );
-   ```
+2. **Token Creation with Temporary Authority**:
+   - Create mint with deployer as temporary mint authority
+   - Set freeze authority to null (permanent)
+   - Initialize transfer fee extension:
+     - Set deployer as temporary fee config authority
+     - Set deployer as temporary withdraw withheld authority
+     - Initial fee: 3000 basis points (30%)
+     - No maximum fee limit
+   - Initialize transfer hook extension:
+     - Set deployer as temporary hook authority
+     - Link to transfer hook program
 
-3. **Token Creation with Dynamic Fee**:
-   ```typescript
-   // Create mint with freeze authority null
-   const initMintIx = createInitializeMint2Instruction(
-     mintKeypair.publicKey,
-     9,                          // decimals
-     walletKeypair.publicKey,    // mint authority (temporary)
-     null,                       // freeze authority (permanently null)
-     TOKEN_2022_PROGRAM_ID
-   );
-   
-   // Initialize transfer fee extension
-   const initTransferFeeIx = createInitializeTransferFeeConfigInstruction(
-     mintKeypair.publicKey,
-     vaultPDA,                   // transfer_fee_config_authority
-     vaultPDA,                   // withdraw_withheld_authority
-     3000,                       // 30% initial fee
-     BigInt('18446744073709551615'), // No max fee limit
-     TOKEN_2022_PROGRAM_ID
-   );
-   
-   // Initialize transfer hook
-   const initHookIx = createInitializeTransferHookInstruction(
-     mintKeypair.publicKey,
-     vaultPDA,                   // hook authority
-     HOOK_PROGRAM_ID,
-     TOKEN_2022_PROGRAM_ID
-   );
-   ```
+3. **Mint Total Supply**:
+   - Mint 1,000,000,000 MIKO tokens
+   - Send to deployer wallet temporarily
+   - This must be done BEFORE revoking mint authority
 
-4. **Mint Authority Revocation**:
-   ```typescript
-   // Revoke mint authority immediately
-   await setAuthority(
-     connection,
-     payer,
-     mintKeypair.publicKey,
-     walletKeypair,
-     AuthorityType.MintTokens,
-     null  // Revoke permanently
-   );
-   ```
-
-5. **Save Token Info**:
+4. **Save Token Info**:
    ```json
    // shared-artifacts/token.json
    {
      "mint": "...",
-     "vaultPDA": "...",
-     "withdrawWithheldAuthority": "... (should match vaultPDA)",
-     "transferFeeConfigAuthority": "... (vaultPDA, will be revoked after 10 min)",
-     "mintAuthority": null,
+     "totalSupply": "1000000000",
+     "temporaryAuthority": "... (deployer)",
      "freezeAuthority": null,
      "createdAt": "..."
    }
    ```
 
-### Phase 3: System Initialization (Week 5)
-**Objective**: Initialize all programs and verify integration
+### Phase 3: System Initialization & Authority Transfer (Week 5)
+**Objective**: Initialize all programs and transfer authorities to PDAs
 
-1. **Initialize Vault**:
-   ```typescript
-   await vaultProgram.methods
-     .initialize(
-       new BN(100_000_000), // min hold amount
-       keeperWallet.publicKey, // keeper authority
-       new BN(500_000_000_000) // harvest threshold: 500k MIKO
-     )
-     .accounts({
-       vault: vaultPDA,
-       authority: authority.publicKey,
-       treasury: treasuryWallet,
-       ownerWallet: ownerWallet,
-       tokenMint: mint,
-       systemProgram: SystemProgram.programId,
-     })
-     .rpc();
-   ```
+1. **Calculate Vault PDA**:
+   - Use findProgramAddressSync with 'vault' seed and mint pubkey
+   - This PDA will receive all authorities
 
-2. **Initialize Transfer Hook**:
-   ```typescript
-   await hookProgram.methods
-     .initialize(
-       mint,
-       totalSupply
-     )
-     .rpc();
-   ```
+2. **Initialize Vault**:
+   - Call vault program's initialize method
+   - Creates the Vault PDA account
+   - Set all configuration parameters
+   - This MUST be done before any authority transfers
 
-3. **Initialize Smart Dial with SOL**:
-   ```typescript
-   await dialProgram.methods
-     .initialize(
-       new PublicKey("So11111111111111111111111111111111111111112"), // SOL
-       treasuryWallet
-     )
-     .rpc();
-   ```
+3. **Initialize Transfer Hook**:
+   - Call hook program's initialize method  
+   - Pass token mint and total supply
+   - Set launch_time to 0 (not launched yet)
+   - Hook is now active but won't limit transfers until launch_time is set
+   - This MUST be done before any token transfers can occur
 
-4. **Create Launch Script**:
-   ```typescript
-   // scripts/launch.ts
-   async function launchMIKO() {
-     // 1. Create Raydium pool
-     const poolKeys = await createRaydiumPool(...);
-     
-     // 2. Set launch timestamp immediately
-     await vaultProgram.methods
-       .setLaunchTime()
-       .accounts({
-         vault: vaultPDA,
-         authority: deployerWallet.publicKey,
-       })
-       .rpc();
-     
-     // 3. Schedule fee updates
-     setTimeout(() => updateFee(), 5 * 60 * 1000);  // 5 min
-     setTimeout(() => finalizeFee(), 10 * 60 * 1000); // 10 min
-   }
-   ```
+4. **Transfer Token Authorities to Vault PDA**:
+   - Transfer fee config authority from deployer to Vault PDA
+   - Transfer withdraw withheld authority from deployer to Vault PDA
+   - Transfer hook authority from deployer to Vault PDA
+   - All programs must be initialized before this step
+
+5. **Initial Transfer Testing**:
+   - Test small transfer to verify 30% fee collection
+   - Verify hook allows transfer (no limit before launch)
+   - Verify fees are withheld correctly
+
+6. **Revoke Mint Authority**:
+   - Permanently revoke mint authority
+   - This MUST be done after all minting is complete
+
+7. **Distribute Initial Token Supply**:
+   - Send tokens from deployer to appropriate wallets:
+     - Liquidity provision allocation  
+     - Team allocation (if any)
+     - Marketing allocation (if any)
+   - Ensure all allocations are complete before launch
+   - Hook is active but won't enforce limits until launch_time is set
+
+8. **Initialize Smart Dial with SOL**:
+   - Call dial program's initialize method
+   - Set initial reward token to SOL mint address
+   - Configure treasury wallet
+   - Record initialization timestamp
+
+9. **Validation Before Launch**:
+   - Verify all authorities transferred correctly
+   - Verify token distribution complete
+   - Verify all programs initialized and working
+   - Test fee collection mechanism
+   - Test harvest function with accumulated fees
+   - Run full integration test suite
+
+10. **Create Launch Script**:
+    - Function to launch MIKO token:
+      - Create Raydium pool with appropriate parameters
+      - Immediately set launch timestamp via vault program
+      - Schedule fee updates at 5 and 10 minute intervals
+      - Log progress for monitoring
 
 ### Phase 4: Keeper Bot Development (Week 6-7)
 **Objective**: Automated operations with launch-aware scheduling
 
 1. **Configuration**:
-   ```typescript
-   export const config = {
-     vaultProgramId: process.env.VAULT_PROGRAM_ID,
-     dialProgramId: process.env.DIAL_PROGRAM_ID,
-     hookProgramId: process.env.HOOK_PROGRAM_ID,
-     keeperPublicKey: process.env.KEEPER_PUBLIC_KEY,
-     launchTimestamp: process.env.LAUNCH_TIMESTAMP,
-     // NO PRIVATE KEYS!
-   };
-   ```
+   - Load environment variables for:
+     - Vault program ID
+     - Dial program ID
+     - Hook program ID
+     - Keeper public key
+     - Launch timestamp
+   - No private keys stored in configuration
 
 2. **Fee Update Manager**:
-   ```typescript
-   class FeeUpdateManager {
-     async checkAndUpdateFee() {
-       const elapsed = Date.now() - this.launchTime;
-       
-       if (elapsed >= 5 * 60 * 1000 && elapsed < 6 * 60 * 1000) {
-         // Update to 15%
-         await this.updateTransferFee();
-       } else if (elapsed >= 10 * 60 * 1000 && elapsed < 11 * 60 * 1000) {
-         // Finalize at 5%
-         await this.updateTransferFee();
-       }
-     }
-   }
-   ```
+   - Class to handle dynamic fee updates:
+     - Track elapsed time since launch
+     - Update to 15% at 5 minutes
+     - Finalize at 5% at 10 minutes
+     - Call vault program's updateTransferFee method
 
 3. **Fee Harvest Monitor**:
-   ```typescript
-   class FeeHarvestMonitor {
-     private readonly HARVEST_THRESHOLD = 500_000_000_000; // 500k MIKO with decimals
-     
-     async checkAndHarvest() {
-       // Get accumulated withheld fees
-       const totalWithheld = await this.getTotalWithheldFees();
-       
-       if (totalWithheld >= this.HARVEST_THRESHOLD) {
-         console.log(`Threshold reached: ${totalWithheld / 1e9} MIKO`);
-         await this.executeFeeHarvest();
-       }
-     }
-     
-     async getTotalWithheldFees(): Promise<number> {
-       // Query all token accounts and sum withheld amounts
-       const accounts = await this.getTokenAccounts();
-       return accounts.reduce((sum, acc) => 
-         sum + (acc.withheldAmount || 0), 0
-       );
-     }
-     
-     async executeFeeHarvest() {
-       const accounts = await this.getAccountsWithFees();
-       const batches = chunk(accounts, 20);
-       
-       for (const batch of batches) {
-         await vaultProgram.methods
-           .harvestFees()
-           .accounts({
-             authority: keeperAuthority,
-             vault: vaultPDA,
-             tokenMint: mint,
-           })
-           .remainingAccounts(batch)
-           .signers([keeperKeypair])
-           .rpc();
-       }
-       
-       // Proceed with swap and distribution
-       await this.swapAndDistribute();
-     }
-   }
-   ```
+   - Class to monitor and harvest fees:
+     - Define harvest threshold (500k MIKO with decimals)
+     - Query total withheld fees across all accounts
+     - Execute harvest when threshold reached
+     - Batch accounts for efficiency (e.g., 20 per transaction)
+     - Trigger swap and distribution after successful harvest
+   - Methods:
+     - checkAndHarvest: Main monitoring function
+     - getTotalWithheldFees: Sum all withheld amounts
+     - executeFeeHarvest: Perform actual harvest operation
 
 4. **Twitter AI Integration** (Active after first Monday):
-   ```typescript
-   async function checkRewardTokenUpdate() {
-     const now = new Date();
-     const firstMonday = getFirstMondayAfterLaunch(LAUNCH_TIMESTAMP);
-     
-     // Before first Monday, keep SOL
-     if (now < firstMonday) {
-       return;
-     }
-     
-     // Monday 00:00-02:00 UTC window
-     if (isMonday && now.getUTCHours() < 2) {
-       const tweets = await twitter.getTweets('@project_miko');
-       const tokens = extractTokenMentions(tweets);
-       const winner = await selectHighestVolume(tokens);
-       await updateRewardToken(winner);
-     }
-   }
-   ```
+   - Function to check and update reward token:
+     - Calculate first Monday after launch
+     - Return early if before first Monday
+     - At Monday 03:00 UTC, fetch @project_miko's pinned tweet
+     - Extract single $SYMBOL mention from pinned message
+     - Query all tokens with that symbol via Birdeye API
+     - Select the token with highest 24h volume among matching symbols
+     - Update reward token in Smart Dial program
 
 5. **Distribution Engine**:
-   ```typescript
-   async function distributeRewards() {
-     // Get current reward token (SOL initially)
-     const rewardToken = await getActiveRewardToken();
-     
-     // Get holders and prices
-     const holders = await birdeye.getTokenHolders(MIKO_MINT);
-     const price = await birdeye.getTokenPrice(MIKO_MINT);
-     
-     // Filter eligible holders
-     const eligible = holders.filter(h => 
-       h.balance * price >= 100
-     );
-     
-     // Distribute
-     await distribute(eligible, rewardToken);
-   }
-   ```
+   - Function to distribute rewards:
+     - Get current reward token (SOL initially)
+     - Query holders via Birdeye API
+     - Get MIKO token price from Birdeye
+     - Filter holders with $100+ USD value
+     - Calculate proportional shares
+     - Execute batch distributions
 
 6. **Scheduler**:
-   ```typescript
-   // Fee updates (one-time)
-   setTimeout(() => feeManager.updateTo15(), 5 * 60 * 1000);
-   setTimeout(() => feeManager.finalizeTo5(), 10 * 60 * 1000);
-   
-   // Every Monday at 03:00 UTC (after first Monday)
-   cron.schedule('0 3 * * 1', async () => {
-     if (Date.now() >= getFirstMondayAfterLaunch()) {
-       await updateRewardToken();
-     }
-   });
-   
-   // Every minute - check if harvest threshold reached
-   cron.schedule('* * * * *', async () => {
-     await harvestMonitor.checkAndHarvest();
-   });
-   ```
+   - One-time fee updates:
+     - Schedule update to 15% at 5 minutes
+     - Schedule finalization to 5% at 10 minutes
+   - Weekly reward token updates:
+     - Every Monday at 03:00 UTC
+     - Check if after first Monday
+     - Fetch pinned tweet and extract symbol
+     - Query matching tokens and select by volume
+   - Continuous monitoring:
+     - Check harvest threshold every minute
+     - Execute harvest/swap/distribute when triggered
 
 ### Phase 5: Integration & Testing (Week 8-9)
 **Objective**: Complete system validation with anti-sniper features
 
-1. **Anti-Sniper Test Scenarios**:
-   - Launch pool and verify 30% initial tax
-   - Test 1% transaction limit enforcement
-   - Verify tax reduction at 5 and 10 minutes
-   - Confirm transaction limits removed after 10 minutes
-   - Test fee authority revocation after 10 minutes
+1. **Pre-Launch Testing** (Before pool creation):
+   - Token transfer functionality with 30% fee
+   - Fee accumulation and harvest mechanism  
+   - Authority verification (all properly transferred)
+   - Exclusion list functionality
+   - Smart Dial configuration
+   - Keeper bot basic operations
 
-2. **Reward Token Scenarios**:
-   - SOL rewards work from launch
-   - First Monday trigger works correctly
-   - AI token selection activates properly
+2. **Launch Simulation**:
+   - Create test pool on devnet
+   - Set launch timestamp
+   - Monitor tax rate changes:
+     - Verify 30% tax active immediately
+     - Test 1% transaction limit enforcement  
+     - Wait 5 minutes, verify 15% tax
+     - Wait 10 minutes, verify 5% tax
+     - Confirm fee authority revoked at 10 minutes
+   - Test transaction limits removed after 10 minutes
 
-3. **Security Tests**:
-   - Mint authority properly revoked
-   - Freeze authority is null
-   - Transfer fee locked after 10 minutes
+3. **Post-Launch Testing**:
+   - Threshold-based harvest trigger (500k MIKO)
+   - Reward distribution to eligible holders
+   - SOL reward scenario
+   - First Monday simulation for reward token change
+   - API integration tests (Twitter, Birdeye, Jupiter)
+
+4. **Load Testing**:
+   - 1000+ holder distribution simulation
+   - High-frequency trading during anti-sniper period
+   - API rate limit handling
+   - Network congestion scenarios
 
 ### Phase 6: Production Deployment (Week 10)
 **Objective**: Mainnet deployment with monitoring
@@ -601,32 +436,29 @@ FROM rust:1.75
 
 ### Reward Token Schedule
 - **Launch to First Monday**: SOL only
-- **First Monday onwards**: AI-selected tokens via Twitter
+- **First Monday onwards**: AI posts pinned tweet (00:00-02:00 UTC), bot checks at 03:00 UTC
 
 ### Tax Flow Scenarios
 
 #### Scenario 1: Reward Token is SOL
-```typescript
-if (keeperBalance < MIN_KEEPER_SOL) {
-  // Use part of tax to top up keeper
-  const needed = TARGET_KEEPER_SOL - keeperBalance;
-  await topUpKeeper(Math.min(needed, taxAmount * 0.01));
-  // Remaining to distributions
-} else {
-  // Normal distribution: 1% owner, 4% holders
-}
-```
+- If keeper balance < MIN_KEEPER_SOL:
+  - Keep all collected tax as SOL
+  - Use up to 20% of tax (owner's portion) for keeper top-up until 0.10 SOL
+  - Send any remaining owner portion to owner
+  - Distribute 80% of tax to holders
+- Else:
+  - Normal distribution: 20% of tax to owner, 80% of tax to holders
 
 #### Scenario 2: Reward Token is NOT SOL
-```typescript
-if (keeperBalance < MIN_KEEPER_SOL) {
-  // Swap minimum needed to SOL first
-  const solNeeded = TARGET_KEEPER_SOL - keeperBalance;
-  await swapToSol(calculateMinimumSwap(solNeeded));
-}
-// Swap remainder to reward token
-await swapToRewardToken(remaining);
-```
+- If keeper balance < MIN_KEEPER_SOL:
+  - Swap 20% of tax (owner's portion) to SOL
+  - Keep SOL in keeper wallet until reaches 0.10 SOL
+  - Send any excess to owner
+  - Swap 80% of tax (holders' portion) to reward token
+  - Distribute reward tokens to holders
+- Else:
+  - Swap all tax to reward token
+  - Distribute: 20% of tax value to owner, 80% of tax value to holders
 
 ### Holder Eligibility System
 1. Fetch MIKO/USD price from Birdeye
@@ -756,7 +588,7 @@ Each phase must pass validation before proceeding:
    - ✅ Dynamic transfer fee (30% → 15% → 5%)
    - ✅ Transaction limits for 10 minutes
    - ✅ Threshold-based fee harvesting (500k MIKO)
-   - ✅ 1%/4% split logic
+   - ✅ 20%/80% split logic of collected tax
    - ✅ Initial SOL rewards, then AI-driven selection
    - ✅ $100 minimum holder eligibility
    - ✅ Dual exclusion lists

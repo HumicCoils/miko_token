@@ -1,39 +1,25 @@
 # Shared Artifacts
 
-This directory contains program IDs and configuration data shared between Docker phases.
+This directory contains shared artifacts between Docker containers for different phases of MIKO token development.
 
-## File Format
+## Artifact Files
 
 ### programs.json
-```json
-{
-  "absoluteVault": {
-    "programId": "...",
-    "deployedAt": "...",
-    "network": "devnet"
-  },
-  "smartDial": {
-    "programId": "...",
-    "deployedAt": "...",
-    "network": "devnet"
-  },
-  "transferHook": {
-    "programId": "...",
-    "deployedAt": "...",
-    "network": "devnet"
-  }
-}
-```
+Contains deployed program IDs for all on-chain programs:
+- absoluteVault: Absolute Vault program ID
+- smartDial: Smart Dial program ID  
+- transferHook: Transfer Hook program ID
 
 ### token.json
-```json
-{
-  "mint": "...",
-  "vaultPDA": "...",
-  "withdrawWithheldAuthority": "...",
-  "transferFeeConfigAuthority": "...",
-  "mintAuthority": null,
-  "freezeAuthority": null,
-  "createdAt": "..."
-}
-```
+Contains MIKO token creation details:
+- mint: Token mint address
+- vaultPDA: Vault Program Derived Address
+- withdrawWithheldAuthority: Authority for withdrawing withheld fees
+- transferFeeConfigAuthority: Authority for fee configuration
+- mintAuthority: Should be null (revoked)
+- freezeAuthority: Should be null
+- createdAt: Token creation timestamp
+
+## Usage
+
+These files are mounted as volumes in Docker containers to share critical information between development phases without hardcoding values.

@@ -11,8 +11,8 @@ A Solana-native token ecosystem that combines protocol-level transaction fees, d
 | **Dynamic Transfer Fee** | Starts at 30% on launch, reduces to 15% after 5 min, then 5% after 10 min (permanently fixed) |
 | **Transaction Size Limit** | Maximum 1% of supply per transaction for first 10 minutes, then unlimited |
 | **Automatic Fee Harvesting** | Keeper Bot monitors and harvests withheld fees when accumulated amount reaches 500,000 MIKO (0.05% of supply) |
-| **Split Logic (1% / 4%)** | 1% of each fee batch goes to project owner; 4% is converted to weekly reward token for holders |
-| **AI-Driven Reward Selection** | Twitter AI agent (@project_miko) suggests tokens every Monday; Keeper bot selects highest volume token via Birdeye |
+| **Split Logic (20% / 80%)** | 20% of collected tax goes to project owner; 80% of collected tax is converted to weekly reward token for holders |
+| **AI-Driven Reward Selection** | Twitter AI agent (@project_miko) posts pinned tweet with $SYMBOL (Mon 00:00-02:00 UTC); Keeper bot checks at 03:00 UTC and selects the token with that symbol having highest 24h volume |
 | **Initial Reward Token** | SOL is the reward token from launch until the first Monday after launch |
 | **Dynamic Holder Eligibility** | Holders must maintain ≥ $100 worth of MIKO to receive rewards; checked at distribution time |
 | **Dual Exclusion Lists** | Separate lists for fee collection and reward distribution; system accounts auto-excluded |
@@ -26,7 +26,7 @@ A Solana-native token ecosystem that combines protocol-level transaction fees, d
 
 ```
 ┌────────────────────────┐      Harvest / Split        ┌───────────────────────┐
-│      Token-2022        │      (5-min cron)          │    Absolute Vault     │
+│      Token-2022        │      (at threshold)        │    Absolute Vault     │
 │   with dynamic fee     ├─────────────────────────────▶│   (Anchor program)    │
 └────────────────────────┘                              │ 1% Owner | 4% Treasury│
         ▲      ▲                                        └────────────┬──────────┘
@@ -47,10 +47,10 @@ A Solana-native token ecosystem that combines protocol-level transaction fees, d
 
 **Off-Chain Services**
 
-- **Keeper Bot** (TypeScript, Node.js 20+, Docker)
+- **Keeper Bot** (TypeScript, Node.js, Docker)
   - Threshold-based harvest (triggers at 500,000 MIKO accumulated)
   - Tax rate updates (5 min, 10 min marks)
-  - Weekly token selection (First Monday after launch onwards)
+  - Weekly token selection from pinned tweet (First Monday after launch onwards)
   - Real-time eligibility checks
   - SOL balance safeguards
 
@@ -62,8 +62,8 @@ A Solana-native token ecosystem that combines protocol-level transaction fees, d
 
 1. Users trade MIKO on any Solana DEX; dynamic fee is withheld automatically
 2. When accumulated fees reach 500,000 MIKO (0.05% of supply), Keeper bot harvests and calls Absolute Vault
-3. Absolute Vault splits the batch: **1% → Owner**, **4% → Treasury**
-4. The 4% share is swapped via Jupiter to current reward token and distributed pro-rata
+3. Absolute Vault splits the batch: **20% of collected tax → Owner**, **80% of collected tax → Treasury**
+4. The 80% share is swapped via Jupiter to current reward token and distributed pro-rata
 
 ### 3.2 Anti-Sniper Protection
 
@@ -87,15 +87,15 @@ A Solana-native token ecosystem that combines protocol-level transaction fees, d
 
 | Condition | Action |
 | --------- | ------ |
-| Bot's SOL < 0.05 | Swap all 5% tax to SOL. 4% → holders, 1% retained until SOL ≥ 0.10, then excess → owner |
-| Bot's SOL ≥ 0.05 | Swap all 5% tax to SOL. 4% → holders, 1% → owner |
+| Bot's SOL < 0.05 | Keep all tax as SOL. 80% of tax → holders, use up to 20% of tax for keeper (until 0.10 SOL), excess → owner |
+| Bot's SOL ≥ 0.05 | Keep all tax as SOL. 80% of tax → holders, 20% of tax → owner |
 
 ### 4.2 Reward Token ≠ SOL (After first Monday AI selection)
 
 | Condition | Action |
 | --------- | ------ |
-| Bot's SOL < 0.05 | Swap 1% of tax to SOL until ≥ 0.10; swap remaining 4% to reward token → holders |
-| Bot's SOL ≥ 0.05 | Swap full 5% tax to reward token: 4% → holders, 1% → owner |
+| Bot's SOL < 0.05 | Swap owner's portion (20% of collected tax) to SOL for keeper until 0.10, excess to owner. Swap holders' portion (80% of collected tax) to reward token → holders |
+| Bot's SOL ≥ 0.05 | Swap all collected tax to reward token: 80% of tax → holders, 20% of tax → owner |
 
 ---
 
@@ -121,33 +121,47 @@ A Solana-native token ecosystem that combines protocol-level transaction fees, d
 
 ### 6.1 Prerequisites
 
-- Rust 1.75+, Anchor 0.30.1, Solana CLI 1.18+
-- Node.js 20+, TypeScript 5.0+
+- Rust (latest stable), Anchor framework, Solana CLI
+- Node.js LTS, TypeScript
 - Docker for keeper bot deployment
 
 ### 6.2 Local Build & Test
 
 ```bash
-# Install toolchains
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-sh -c "$(curl -sSfL https://release.solana.com/v1.18.0/install)"
-cargo install --git https://github.com/coral-xyz/anchor anchor-cli --locked
+# Install required toolchains
+# - Rust toolchain
+# - Solana development tools
+# - Anchor framework
 
 # Clone & bootstrap
-anchor init miko-token --javascript
-anchor build
-anchor test          # runs localnet e2e suite
+# Initialize anchor project
+# Build programs
+# Run tests on localnet
 ```
 
 ### 6.3 Deploy to Devnet
 
 ```bash
-solana airdrop 2
-anchor deploy --provider.cluster devnet
-# Create Token-2022 mint with 30% initial fee
-# Deploy transfer hook program
-# Initialize programs
-# Set launch timestamp on liquidity addition
+# Phase 1: Deploy programs
+# - Deploy Absolute Vault program
+# - Deploy Smart Dial program  
+# - Deploy Transfer Hook program
+
+# Phase 2: Create token
+# - Create Token-2022 mint with temporary authority
+# - Initialize extensions (30% fee, hook)
+# - Mint total supply (1B MIKO)
+
+# Phase 3: Initialize and transfer
+# - Initialize all programs (creates PDAs)
+# - Transfer authorities to Vault PDA
+# - Revoke mint authority
+# - Distribute tokens to wallets
+
+# Phase 4: Launch
+# - Create Raydium pool
+# - Set launch timestamp
+# - Start keeper bot
 ```
 
 ---

@@ -17,8 +17,9 @@ docker/phase*/workspace/target/
 docker/phase*/workspace/*/node_modules/
 docker/phase*/workspace/*/target/
 
-# Keep shared artifacts structure but ignore generated files
-docker/shared-artifacts/*.json
+# Keep shared artifacts for problem resolution
+!docker/shared-artifacts/programs.json
+!docker/shared-artifacts/token-info.json
 !docker/shared-artifacts/README.md
 !docker/shared-artifacts/.gitkeep
 
@@ -58,8 +59,9 @@ coverage/
 yarn.lock
 .yarn/
 
-# Cargo
+# Cargo - keep programs/Cargo.lock for exact reproduction
 Cargo.lock
+!programs/Cargo.lock
 
 # Temporary files
 *.tmp
@@ -86,6 +88,12 @@ __pycache__/
 *.bak
 *.orig
 
+# Old versions (not needed for current issue)
+*_old_v*
+plan_old_v*
+readme_old_v*
+todo_old_v*
+
 # Solana test ledger
 test-ledger/
 .cache
@@ -94,8 +102,16 @@ test-ledger/
 !docker-compose.yml
 !*/Dockerfile
 !scripts/*.sh
+!scripts/*.js
 !.gitignore
 !README.md
 !PLAN.md
 !TO_DO.md
 !DEVELOPMENT_STATUS.md
+!Anchor.toml
+!package.json
+!package-lock.json
+!tsconfig.json
+!programs/Anchor.toml
+!programs/package.json
+!programs/package-lock.json

@@ -1,51 +1,53 @@
-# Phase 1: Core Programs Development
-FROM rust:1.81-slim
+FROM ubuntu:22.04
+
+# Set non-interactive frontend
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
+RUN apt-get update -qq && apt-get upgrade -qq && apt-get install -qq \
+    build-essential \
+    git \
     curl \
     wget \
-    git \
-    build-essential \
-    bzip2 \
+    jq \
+    pkg-config \
+    python3-pip \
+    libssl-dev \
+    libudev-dev \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Solana CLI 1.18.23 from GitHub releases
-ENV SOLANA_VERSION=v1.18.23
-RUN cd /tmp && \
-    wget -q https://github.com/anza-xyz/agave/releases/download/${SOLANA_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2 && \
-    tar -xf solana-release-x86_64-unknown-linux-gnu.tar.bz2 && \
-    mv solana-release/bin/* /usr/local/bin/ && \
-    rm -rf /tmp/solana-*
+# Install Rust
+RUN curl "https://sh.rustup.rs" -sfo rustup.sh && \
+    sh rustup.sh -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup component add rustfmt clippy
 
-# Verify Solana installation
-RUN solana --version
+# Install Node.js (required for Anchor)
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Anchor via Cargo (using the specific version)
-RUN cargo install --git https://github.com/coral-xyz/anchor --tag v0.30.1 anchor-cli --locked
+# Install Solana CLI
+ENV SOLANA_VERSION=v1.18.17
+RUN sh -c "$(curl -sSfL https://release.anza.xyz/${SOLANA_VERSION}/install)"
+ENV PATH="/root/.local/share/solana/install/active_release/bin:${PATH}"
 
-# Install Node.js 20 for Anchor tests
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs
+# Install Anchor CLI
+ENV ANCHOR_VERSION=0.30.1
+RUN cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli
 
-# Install Yarn
-RUN npm install -g yarn
-
-# Set working directory
+# Set up workspace
 WORKDIR /workspace
 
-# Create directory for shared artifacts
-RUN mkdir -p /shared-artifacts
+# Create programs directory structure
+RUN mkdir -p programs/{absolute-vault,smart-dial,transfer-hook}
 
-# Verify all installations work
-RUN solana --version && \
-    anchor --version && \
-    node --version && \
-    yarn --version && \
-    rustc --version
+# Verify installations
+RUN solana --version && anchor --version && rustc --version && node --version
 
-# Default command
-CMD ["/bin/bash"]
+# Set Solana to devnet by default
+RUN solana config set --url https://api.devnet.solana.com
+
+# Keep container running
+CMD ["tail", "-f", "/dev/null"]
