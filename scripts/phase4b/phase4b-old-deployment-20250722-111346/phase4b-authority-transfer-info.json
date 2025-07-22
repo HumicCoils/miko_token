@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-07-22T09:08:44.346Z",
+  "token": "HD4QRxVDA9Ec4wEXH2obhtqmkUbpGof74EnZwqt1eyQH",
+  "vaultPda": "2mJVNU4cGs4EGwJgs7RAgdYMQNcc5rQefSNEttv3dcBg",
+  "transfers": {
+    "transferFeeConfig": {
+      "from": "EwUyPEqdJ7rZvwocov7n4S35sdNA9sru5xjyX4capyjU",
+      "to": "2mJVNU4cGs4EGwJgs7RAgdYMQNcc5rQefSNEttv3dcBg",
+      "signature": "4DBb52mqPXfgKx1YYasekvQLrwgRhRuzBxeuFDB9MwXMpAunJd7rykkySrLJZeERDxHpbQVtEzS1L83nYu9DqajZ"
+    },
+    "withdrawWithheld": {
+      "from": "EwUyPEqdJ7rZvwocov7n4S35sdNA9sru5xjyX4capyjU",
+      "to": "2mJVNU4cGs4EGwJgs7RAgdYMQNcc5rQefSNEttv3dcBg",
+      "signature": "1KfnjFkvV3kkpwh9FXn8tagFgpfR9XgrkbcGvgvNAaSBmCijjnsaGD9Yxv5vA7kDRcEpmYLuMXmZkg8sWgT4Ruh"
+    }
+  }
+}

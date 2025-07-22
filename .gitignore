@@ -1,117 +1,85 @@
-# Dependencies
+# Node
 node_modules/
-*/node_modules/
-*/*/node_modules/
-
-# Build outputs
-target/
-*/target/
-*/*/target/
-dist/
-build/
-*.so
-
-# Docker volumes (large and not needed)
-docker/phase*/workspace/node_modules/
-docker/phase*/workspace/target/
-docker/phase*/workspace/*/node_modules/
-docker/phase*/workspace/*/target/
-
-# Keep shared artifacts for problem resolution
-!docker/shared-artifacts/programs.json
-!docker/shared-artifacts/token-info.json
-!docker/shared-artifacts/README.md
-!docker/shared-artifacts/.gitkeep
-
-# Anchor
-.anchor/
-**/.anchor/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Keys (security - never commit)
-*-keypair.json
-id.json
-/wallets
-*.pem
-*.key
-
-# Logs
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Rust/Anchor
+target/
+Cargo.lock
+**/*.rs.bk
+
+# Build artifacts
+dist/
+build/
+out/
+.anchor/
+.cache/
+test-ledger/
+programs/.anchor/
+
+# IDL files (large generated files)
+*.idl.json
+programs/target/idl/
+programs/target/types/
+
+# Keypairs and secrets (SECURITY)
+*.keypair
+*.keypair.json
+*-keypair.json
+keypairs/
+.env
+.env.local
+.env.*.local
+
+# Docker volumes
+docker/shared-artifacts/*.json
+docker/shared-artifacts/*.ts
+docker/shared-artifacts/*.js
+!docker/shared-artifacts/README.md
+
+# Verification artifacts
+verification/
+scripts/phase*/node_modules/
+scripts/phase*/*.json
+scripts/phase*/*.js
+!scripts/phase*/tsconfig.json
+
+# Logs
+logs/
+*.log
+.log/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
 # Test coverage
 coverage/
 .nyc_output/
 
-# Yarn
-yarn.lock
-.yarn/
+# Phase-specific builds
+scripts/phase2/node_modules/
+scripts/phase3/node_modules/
+scripts/phase4a/node_modules/
+scripts/phase4b/node_modules/
+scripts/phase4b/phase4b-programs/
 
-# Cargo - keep programs/Cargo.lock for exact reproduction
-Cargo.lock
-!programs/Cargo.lock
+# Large test files
+test-results/
+*.test.json
 
 # Temporary files
+tmp/
+temp/
 *.tmp
 *.temp
-.cache/
-tmp/
 
-# Local environment
-.env
-.env.local
-.env.*.local
-!.env.example
-
-# Large compiled files
-*.wasm
-*.dylib
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-
-# Misc
-*.bak
-*.orig
-
-# Old versions (not needed for current issue)
-*_old_v*
-plan_old_v*
-readme_old_v*
-todo_old_v*
-
-# Solana test ledger
-test-ledger/
-.cache
-
-# Keep important config files
-!docker-compose.yml
-!*/Dockerfile
-!scripts/*.sh
-!scripts/*.js
-!.gitignore
-!README.md
-!PLAN.md
-!TO_DO.md
-!DEVELOPMENT_STATUS.md
-!Anchor.toml
-!package.json
-!package-lock.json
-!tsconfig.json
-!programs/Anchor.toml
-!programs/package.json
-!programs/package-lock.json
+# Fork data
+fork-data/

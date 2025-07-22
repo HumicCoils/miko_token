@@ -1,26 +1,15 @@
 use anchor_lang::prelude::*;
 
-declare_id!("2Ymuq9Nt9s1GH1qGVuFd6jCqefJcmsPReE3MmiieEhZc");
+declare_id!("DggkQFbBnkMCK43y5JTHfYdX3CKw2H3m177TbLC7Mjdz");
 
-const DIAL_SEED: &[u8] = b"smart-dial";
-const SECONDS_PER_DAY: i64 = 86400;
-const SECONDS_PER_WEEK: i64 = 604800;
-const UPDATE_HISTORY_SIZE: usize = 52; // Track last 52 updates (1 year of weekly updates)
 
-// Error codes
-#[error_code]
-pub enum SmartDialError {
-    #[msg("Not Monday - updates only allowed on Mondays")]
-    NotMonday,
-    #[msg("Update too soon - 24 hour minimum between updates")]
-    UpdateTooSoon,
-    #[msg("First Monday not reached yet")]
-    FirstMondayNotReached,
-    #[msg("Not authorized")]
-    Unauthorized,
-    #[msg("Invalid reward token")]
-    InvalidRewardToken,
-}
+pub const DIAL_SEED: &[u8] = b"smart-dial";
+
+
+pub const UPDATE_COOLDOWN: i64 = 86400; // 24 hours in seconds
+
+
+pub const SECONDS_PER_WEEK: i64 = 604800; // 7 days
 
 #[program]
 pub mod smart_dial {
@@ -28,151 +17,111 @@ pub mod smart_dial {
 
     pub fn initialize(
         ctx: Context<Initialize>,
-        launch_timestamp: i64,
+        authority: Pubkey,
+        treasury: Pubkey,
     ) -> Result<()> {
-        let dial = &mut ctx.accounts.dial_state;
+        let dial_state = &mut ctx.accounts.dial_state;
         
-        dial.authority = ctx.accounts.authority.key();
-        dial.treasury = ctx.accounts.treasury.key();
-        dial.launch_timestamp = launch_timestamp;
+        dial_state.authority = authority;
+        dial_state.treasury = treasury;
+        dial_state.current_reward_token = Pubkey::default(); // SOL (default)
+        dial_state.last_update = 0;
+        dial_state.launch_timestamp = Clock::get()?.unix_timestamp;
         
-        // Default reward token is SOL (native mint)
-        dial.current_reward_token = spl_token_2022::native_mint::ID;
-        dial.last_update_timestamp = 0;
-        dial.total_updates = 0;
-        dial.bump = ctx.bumps.dial_state;
-        
-        // Initialize update history
-        dial.update_history = Vec::with_capacity(UPDATE_HISTORY_SIZE);
-        
-        msg!("Smart Dial initialized with launch timestamp {}", launch_timestamp);
+        msg!("Smart Dial initialized with SOL as default reward token");
         Ok(())
     }
-    
+
     pub fn update_reward_token(
         ctx: Context<UpdateRewardToken>,
         new_reward_token: Pubkey,
     ) -> Result<()> {
-        let dial = &mut ctx.accounts.dial_state;
+        let dial_state = &mut ctx.accounts.dial_state;
         let clock = Clock::get()?;
         
-        // Only the authority can update
-        require!(ctx.accounts.authority.key() == dial.authority, SmartDialError::Unauthorized);
+        // Check if first Monday has passed
+        let first_monday = calculate_first_monday(dial_state.launch_timestamp);
+        require!(
+            clock.unix_timestamp >= first_monday,
+            SmartDialError::FirstMondayNotReached
+        );
         
-        // Calculate first Monday after launch
-        let first_monday = calculate_first_monday(dial.launch_timestamp);
+        // Check if today is Monday (UTC)
+        let current_day = get_day_of_week(clock.unix_timestamp);
+        require!(
+            current_day == 1, // Monday
+            SmartDialError::NotMonday
+        );
         
-        // Check if we have reached the first Monday
-        require!(clock.unix_timestamp >= first_monday, SmartDialError::FirstMondayNotReached);
-        
-        // Check if today is Monday (after first Monday)
-        require!(is_monday(clock.unix_timestamp), SmartDialError::NotMonday);
-        
-        // Check 24-hour constraint
-        if dial.last_update_timestamp > 0 {
-            let elapsed = clock.unix_timestamp - dial.last_update_timestamp;
-            require!(elapsed >= SECONDS_PER_DAY, SmartDialError::UpdateTooSoon);
+        // Check 24-hour cooldown
+        if dial_state.last_update > 0 {
+            require!(
+                clock.unix_timestamp - dial_state.last_update >= UPDATE_COOLDOWN,
+                SmartDialError::UpdateCooldown
+            );
         }
         
-        // Validate the new reward token
-        require!(new_reward_token != Pubkey::default(), SmartDialError::InvalidRewardToken);
+        // Update reward token
+        let old_token = dial_state.current_reward_token;
+        dial_state.current_reward_token = new_reward_token;
+        dial_state.last_update = clock.unix_timestamp;
         
-        // Record the update in history
-        let old_token = dial.current_reward_token;
-        let update = UpdateRecord {
-            timestamp: clock.unix_timestamp,
-            old_token: dial.current_reward_token,
-            new_token: new_reward_token,
-        };
-        
-        // Add to history, removing oldest if at capacity
-        if dial.update_history.len() >= UPDATE_HISTORY_SIZE {
-            dial.update_history.remove(0);
+        // Add to history
+        if dial_state.update_history.len() < 52 { // Keep last year of updates
+            dial_state.update_history.push(UpdateEntry {
+                timestamp: clock.unix_timestamp,
+                old_token,
+                new_token: new_reward_token,
+            });
+        } else {
+            // Rotate history (remove oldest, add newest)
+            dial_state.update_history.remove(0);
+            dial_state.update_history.push(UpdateEntry {
+                timestamp: clock.unix_timestamp,
+                old_token,
+                new_token: new_reward_token,
+            });
         }
-        dial.update_history.push(update);
-        
-        // Update the current reward token
-        dial.current_reward_token = new_reward_token;
-        dial.last_update_timestamp = clock.unix_timestamp;
-        dial.total_updates += 1;
         
         msg!("Reward token updated from {} to {}", old_token, new_reward_token);
         Ok(())
     }
-    
+
     pub fn update_treasury(
-        ctx: Context<UpdateTreasury>,
+        ctx: Context<UpdateConfig>,
         new_treasury: Pubkey,
     ) -> Result<()> {
-        let dial = &mut ctx.accounts.dial_state;
-        
-        require!(ctx.accounts.authority.key() == dial.authority, SmartDialError::Unauthorized);
-        
-        dial.treasury = new_treasury;
-        
-        msg!("Treasury updated to {}", new_treasury);
+        let dial_state = &mut ctx.accounts.dial_state;
+        dial_state.treasury = new_treasury;
+        msg!("Treasury updated to: {}", new_treasury);
         Ok(())
     }
-    
+
     pub fn update_authority(
-        ctx: Context<UpdateAuthority>,
+        ctx: Context<UpdateConfig>,
         new_authority: Pubkey,
     ) -> Result<()> {
-        let dial = &mut ctx.accounts.dial_state;
-        
-        require!(ctx.accounts.authority.key() == dial.authority, SmartDialError::Unauthorized);
-        
-        dial.authority = new_authority;
-        
-        msg!("Authority updated to {}", new_authority);
+        let dial_state = &mut ctx.accounts.dial_state;
+        dial_state.authority = new_authority;
+        msg!("Authority updated to: {}", new_authority);
         Ok(())
     }
 }
 
-// Helper functions
-fn calculate_first_monday(launch_timestamp: i64) -> i64 {
-    // Convert timestamp to days since Unix epoch
-    let launch_day = launch_timestamp / SECONDS_PER_DAY;
-    
-    // January 1, 1970 was a Thursday (day 4, where Monday = 1)
-    // Days since epoch % 7 gives us: 0=Thu, 1=Fri, 2=Sat, 3=Sun, 4=Mon, 5=Tue, 6=Wed
-    let launch_weekday = ((launch_day + 4) % 7) as u8;
-    
-    // Calculate days until next Monday (1)
-    let days_to_monday = if launch_weekday <= 4 {
-        4 - launch_weekday // If Thu-Mon, days until next Mon
-    } else {
-        11 - launch_weekday // If Tue-Wed, days until Mon of next week
-    } as i64;
-    
-    // Return timestamp of first Monday at 00:00 UTC
-    (launch_day + days_to_monday) * SECONDS_PER_DAY
-}
-
-fn is_monday(timestamp: i64) -> bool {
-    let day = timestamp / SECONDS_PER_DAY;
-    // Monday is when (days + 4) % 7 == 4
-    ((day + 4) % 7) == 4
-}
-
-// Account structures
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(
         init,
         payer = payer,
-        space = DialState::LEN,
+        space = 8 + DialState::INIT_SPACE,
         seeds = [DIAL_SEED],
         bump
     )]
     pub dial_state: Account<'info, DialState>,
     
-    pub authority: Signer<'info>,
-    /// CHECK: Treasury can be any valid account
-    pub treasury: UncheckedAccount<'info>,
-    
     #[account(mut)]
     pub payer: Signer<'info>,
+    
     pub system_program: Program<'info, System>,
 }
 
@@ -181,7 +130,8 @@ pub struct UpdateRewardToken<'info> {
     #[account(
         mut,
         seeds = [DIAL_SEED],
-        bump = dial_state.bump
+        bump,
+        constraint = dial_state.authority == authority.key() @ SmartDialError::Unauthorized
     )]
     pub dial_state: Account<'info, DialState>,
     
@@ -189,63 +139,70 @@ pub struct UpdateRewardToken<'info> {
 }
 
 #[derive(Accounts)]
-pub struct UpdateTreasury<'info> {
+pub struct UpdateConfig<'info> {
     #[account(
         mut,
         seeds = [DIAL_SEED],
-        bump = dial_state.bump
+        bump,
+        constraint = dial_state.authority == authority.key() @ SmartDialError::Unauthorized
     )]
     pub dial_state: Account<'info, DialState>,
     
     pub authority: Signer<'info>,
 }
 
-#[derive(Accounts)]
-pub struct UpdateAuthority<'info> {
-    #[account(
-        mut,
-        seeds = [DIAL_SEED],
-        bump = dial_state.bump
-    )]
-    pub dial_state: Account<'info, DialState>,
-    
-    pub authority: Signer<'info>,
-}
-
-// State structures
 #[account]
+#[derive(InitSpace)]
 pub struct DialState {
     pub authority: Pubkey,
-    pub treasury: Pubkey,
-    pub launch_timestamp: i64,
     pub current_reward_token: Pubkey,
-    pub last_update_timestamp: i64,
-    pub total_updates: u64,
-    pub bump: u8,
-    pub update_history: Vec<UpdateRecord>,
+    pub treasury: Pubkey,
+    pub last_update: i64,
+    pub launch_timestamp: i64,
+    #[max_len(52)] // Keep last year of weekly updates
+    pub update_history: Vec<UpdateEntry>,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct UpdateRecord {
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
+pub struct UpdateEntry {
     pub timestamp: i64,
     pub old_token: Pubkey,
     pub new_token: Pubkey,
 }
 
-impl DialState {
-    pub const LEN: usize = 8 + // discriminator
-        32 + // authority
-        32 + // treasury
-        8 + // launch_timestamp
-        32 + // current_reward_token
-        8 + // last_update_timestamp
-        8 + // total_updates
-        1 + // bump
-        4 + (UPDATE_HISTORY_SIZE * UpdateRecord::LEN); // update_history vec
+#[error_code]
+pub enum SmartDialError {
+    #[msg("Unauthorized")]
+    Unauthorized,
+    
+    #[msg("Not Monday (UTC)")]
+    NotMonday,
+    
+    #[msg("24-hour update cooldown not met")]
+    UpdateCooldown,
+    
+    #[msg("First Monday after launch not reached")]
+    FirstMondayNotReached,
 }
 
-impl UpdateRecord {
-    pub const LEN: usize = 8 + // timestamp
-        32 + // old_token
-        32; // new_token
+// Helper functions
+fn calculate_first_monday(launch_timestamp: i64) -> i64 {
+    // Get day of week for launch (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+    let launch_day = get_day_of_week(launch_timestamp);
+    
+    // Calculate days until next Monday
+    let days_until_monday = if launch_day <= 1 {
+        1 - launch_day
+    } else {
+        8 - launch_day
+    };
+    
+    // Add days to get first Monday
+    launch_timestamp + (days_until_monday * 86400)
+}
+
+fn get_day_of_week(timestamp: i64) -> i64 {
+    // Unix epoch (Jan 1, 1970) was a Thursday (day 4)
+    // So we need to adjust by 4 days
+    ((timestamp / 86400 + 4) % 7)
 }

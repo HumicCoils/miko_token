@@ -1,37 +1,47 @@
-FROM node:18-slim
+# Phase 4: Keeper Bot Development Environment
+FROM node:18-alpine AS base
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
+# Install required packages
+RUN apk add --no-cache \
     git \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    bash \
+    curl \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/cache/apk/*
 
-# Install TypeScript and required packages
-RUN npm install -g typescript ts-node nodemon
-
-# Set up workspace
+# Set working directory
 WORKDIR /workspace
 
-# Create keeper-bot directory structure
-RUN mkdir -p keeper-bot/{src,config}
+# Install TypeScript and required global packages
+RUN npm install -g \
+    typescript@^5.0.0 \
+    ts-node@^10.0.0 \
+    nodemon@^3.0.0 \
+    pnpm@^8.0.0
 
-# Install dependencies for keeper bot
-RUN cd keeper-bot && npm init -y && \
-    npm install @solana/web3.js@1.87.6 \
-                @solana/spl-token@0.3.9 \
-                @solana/spl-token-2022@0.1.0 \
-                @coral-xyz/anchor@0.29.0 \
-                node-cron \
-                axios \
-                winston \
-                dotenv \
-                bs58 \
-                @types/node \
-                @types/node-cron
+# Set environment variables
+ENV NODE_ENV=development
+ENV PATH="/workspace/keeper-bot/node_modules/.bin:$PATH"
 
-# Verify installations
-RUN node --version && npm --version
+# Copy the keeper-bot directory structure
+COPY keeper-bot/package*.json /workspace/keeper-bot/
+COPY keeper-bot/tsconfig.json /workspace/keeper-bot/
+COPY keeper-bot/jest.config.js /workspace/keeper-bot/
 
-# Keep container running
-CMD ["tail", "-f", "/dev/null"]
+# Install dependencies
+WORKDIR /workspace/keeper-bot
+RUN npm install
+
+# Copy source code
+COPY keeper-bot/ /workspace/keeper-bot/
+
+# Build the TypeScript code
+RUN npm run build || true
+
+# Default working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["bash"]

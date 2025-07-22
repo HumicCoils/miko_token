@@ -4,22 +4,17 @@
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-smart-dial = "2Ymuq9Nt9s1GH1qGVuFd6jCqefJcmsPReE3MmiieEhZc"
-transfer-hook = "2Mh6sSYeqeyqRZz8cr7y8gFtxyNf7HoMWqwzm9uTFav3"
-absolute-vault = "5hVLxMW58Vaax1kWt9Xme3AoS5ZwUfGaCi34eDiaFAzu"
-
 [programs.devnet]
-smart-dial = "2Ymuq9Nt9s1GH1qGVuFd6jCqefJcmsPReE3MmiieEhZc"
-transfer-hook = "2Mh6sSYeqeyqRZz8cr7y8gFtxyNf7HoMWqwzm9uTFav3"
-absolute-vault = "5hVLxMW58Vaax1kWt9Xme3AoS5ZwUfGaCi34eDiaFAzu"
+absolute_vault = "4ieMsf7qFmh1W5FwcaX6M3fz3NNyaGy3FyuXoKJLrRDq"
+smart_dial = "DggkQFbBnkMCK43y5JTHfYdX3CKw2H3m177TbLC7Mjdz"
+transfer_hook = "4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Devnet"
-wallet = "/root/.config/solana/id.json"
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test = "node --max-old-space-size=8192 node_modules/@coral-xyz/anchor/dist/cjs/cli/cli.js test"

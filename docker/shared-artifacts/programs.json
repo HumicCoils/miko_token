@@ -1,32 +1,20 @@
 {
   "absoluteVault": {
-    "programId": "5hVLxMW58Vaax1kWt9Xme3AoS5ZwUfGaCi34eDiaFAzu",
-    "name": "absolute-vault",
-    "deployedAt": "2025-07-14T09:40:04Z",
+    "programId": "4ieMsf7qFmh1W5FwcaX6M3fz3NNyaGy3FyuXoKJLrRDq",
+    "deployedAt": "2025-07-15T14:45:00Z",
     "network": "devnet",
-    "built": true,
-    "deployed": true,
-    "authority": "5G6xe3usdW5z1wEVE1kK8zUCRZj6UYXvC81PvJ6gYBgF",
-    "programDataAddress": "GVU2GYEKafyPKYJpmSWRZ47ZkSFLh7PR1uZb2iVnorNC"
+    "keypairGenerated": "2025-07-15T10:48:35Z"
   },
   "transferHook": {
-    "programId": "B2KkZbyd9jptD4ns1mBCCrLXH9ozbTWGN4PwgKfAg3LP",
-    "name": "transfer-hook",
-    "deployedAt": "2025-07-14T10:19:01Z",
+    "programId": "4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4",
+    "deployedAt": "2025-07-15T14:46:00Z",
     "network": "devnet",
-    "built": true,
-    "deployed": true,
-    "authority": "5G6xe3usdW5z1wEVE1kK8zUCRZj6UYXvC81PvJ6gYBgF",
-    "declaredId": "2Mh6sSYeqeyqRZz8cr7y8gFtxyNf7HoMWqwzm9uTFav3"
+    "keypairGenerated": "2025-07-15T10:48:35Z"
   },
   "smartDial": {
-    "programId": "F73eRCVZv9mxaMjYUd3Le3gPeEMQgFHU8qL3v3YmrHjg",
-    "name": "smart-dial",
-    "deployedAt": "2025-07-14T10:39:49Z",
+    "programId": "DggkQFbBnkMCK43y5JTHfYdX3CKw2H3m177TbLC7Mjdz",
+    "deployedAt": "2025-07-16T03:31:00Z",
     "network": "devnet",
-    "built": true,
-    "deployed": true,
-    "authority": "5G6xe3usdW5z1wEVE1kK8zUCRZj6UYXvC81PvJ6gYBgF",
-    "declaredId": "2Ymuq9Nt9s1GH1qGVuFd6jCqefJcmsPReE3MmiieEhZc"
+    "keypairGenerated": "2025-07-15T10:48:35Z"
   }
 }

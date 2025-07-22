@@ -1,20 +1,22 @@
+version: '3.8'
+
 services:
   phase1-programs:
     build:
       context: ./docker/phase1-programs
       dockerfile: Dockerfile
-    platform: linux/amd64
     container_name: miko-phase1-programs
     volumes:
       - ./docker/shared-artifacts:/shared-artifacts
       - ./programs:/workspace/programs
     environment:
-      - SOLANA_NETWORK=devnet
       - RUST_LOG=info
-    working_dir: /workspace
-    command: tail -f /dev/null
+      - ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
     networks:
       - miko-network
+    stdin_open: true
+    tty: true
+    command: /bin/bash
 
   phase2-token:
     build:
@@ -25,13 +27,14 @@ services:
       - ./docker/shared-artifacts:/shared-artifacts
       - ./scripts:/workspace/scripts
     environment:
-      - SOLANA_NETWORK=devnet
-    working_dir: /workspace
-    command: tail -f /dev/null
-    depends_on:
-      - phase1-programs
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
     networks:
       - miko-network
+    depends_on:
+      - phase1-programs
+    stdin_open: true
+    tty: true
+    command: /bin/bash
 
   phase3-init:
     build:
@@ -42,31 +45,35 @@ services:
       - ./docker/shared-artifacts:/shared-artifacts
       - ./scripts:/workspace/scripts
     environment:
-      - SOLANA_NETWORK=devnet
-    working_dir: /workspace
-    command: tail -f /dev/null
-    depends_on:
-      - phase2-token
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
     networks:
       - miko-network
+    depends_on:
+      - phase2-token
+    stdin_open: true
+    tty: true
+    command: /bin/bash
 
   phase4-keeper:
     build:
-      context: ./docker/phase4-keeper
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./docker/phase4-keeper/Dockerfile
     container_name: miko-phase4-keeper
     volumes:
       - ./docker/shared-artifacts:/shared-artifacts
       - ./keeper-bot:/workspace/keeper-bot
+      - ./keeper-bot/logs:/workspace/keeper-bot/logs
     environment:
-      - NODE_ENV=production
-      - SOLANA_NETWORK=devnet
-    working_dir: /workspace
-    command: tail -f /dev/null
-    depends_on:
-      - phase3-init
+      - NODE_ENV=development
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - CONFIG_PATH=/workspace/keeper-bot/config/mock_config.toml
     networks:
       - miko-network
+    depends_on:
+      - phase3-init
+    stdin_open: true
+    tty: true
+    command: /bin/bash
 
 networks:
   miko-network:

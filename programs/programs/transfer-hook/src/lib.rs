@@ -1,227 +1,223 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenAccount};
-use spl_transfer_hook_interface::error::TransferHookError as SplTransferHookError;
-use spl_transfer_hook_interface::instruction::ExecuteInstruction;
 use spl_tlv_account_resolution::{
-    state::ExtraAccountMetaList,
     account::ExtraAccountMeta,
     seeds::Seed,
+    state::ExtraAccountMetaList,
 };
+use spl_transfer_hook_interface::instruction::{ExecuteInstruction, InitializeExtraAccountMetaListInstruction};
+use spl_discriminator::discriminator::SplDiscriminate;
 
-declare_id!("2Mh6sSYeqeyqRZz8cr7y8gFtxyNf7HoMWqwzm9uTFav3");
+declare_id!("4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4");
 
-const HOOK_CONFIG_SEED: &[u8] = b"hook-config";
-const EXTRA_ACCOUNT_METAS_SEED: &[u8] = b"extra-account-metas";
-const ANTI_SNIPER_DURATION: i64 = 600; // 10 minutes in seconds
-const ANTI_SNIPER_LIMIT_BPS: u64 = 100; // 1% in basis points
 
-// Error codes
-#[error_code]
-pub enum TransferHookError {
-    #[msg("Transfer exceeds anti-sniper limit")]
-    ExceedsAntiSniperLimit,
-    #[msg("Invalid instruction")]
-    InvalidInstruction,
-    #[msg("Configuration already initialized")]
-    AlreadyInitialized,
-    #[msg("Not authorized")]
-    Unauthorized,
-}
+pub const TRANSFER_HOOK_CONFIG_SEED: &[u8] = b"transfer-hook-config";
+
+
+pub const ANTI_SNIPER_DURATION: i64 = 600; // 10 minutes in seconds
 
 #[program]
 pub mod transfer_hook {
     use super::*;
 
-    pub fn initialize(
-        ctx: Context<Initialize>,
+    // Initialize extra account meta list for the transfer hook
+    #[instruction(discriminator = InitializeExtraAccountMetaListInstruction::SPL_DISCRIMINATOR_SLICE)]
+    pub fn initialize_extra_account_meta_list(
+        ctx: Context<InitializeExtraAccountMetaList>,
         total_supply: u64,
     ) -> Result<()> {
-        let config = &mut ctx.accounts.hook_config;
+        let config = &mut ctx.accounts.transfer_hook_config;
         
-        require!(config.launch_timestamp == 0, TransferHookError::AlreadyInitialized);
-        
-        config.mint = ctx.accounts.mint.key();
-        config.authority = ctx.accounts.authority.key();
+        config.launch_time = 0; // Not launched yet
+        config.token_mint = ctx.accounts.token_mint.key();
         config.total_supply = total_supply;
-        config.launch_timestamp = 0; // Will be set when launch happens
-        config.anti_sniper_active = false;
-        config.bump = ctx.bumps.hook_config;
+        config.authority = ctx.accounts.authority.key();
         
-        msg!("Transfer hook initialized for mint {}", ctx.accounts.mint.key());
-        Ok(())
-    }
-    
-    pub fn set_launch_time(ctx: Context<SetLaunchTime>) -> Result<()> {
-        let config = &mut ctx.accounts.hook_config;
-        
-        require!(config.launch_timestamp == 0, TransferHookError::AlreadyInitialized);
-        require!(ctx.accounts.authority.key() == config.authority, TransferHookError::Unauthorized);
-        
-        config.launch_timestamp = Clock::get()?.unix_timestamp;
-        config.anti_sniper_active = true;
-        
-        msg!("Launch time set to {}", config.launch_timestamp);
-        Ok(())
-    }
-    
-    // Initialize extra account metas for the transfer hook
-    pub fn initialize_extra_account_metas(
-        ctx: Context<InitializeExtraAccountMetas>,
-    ) -> Result<()> {
-        // We need the hook config account to validate transfers
-        let account_metas = vec![
+        // Initialize extra account metas
+        let extra_account_metas = vec![
             ExtraAccountMeta::new_with_seeds(
                 &[
-                    Seed::Literal { bytes: HOOK_CONFIG_SEED.to_vec() },
-                    Seed::AccountKey { index: 0 }, // mint account is at index 0
+                    Seed::Literal { bytes: TRANSFER_HOOK_CONFIG_SEED.to_vec() },
+                    Seed::AccountKey { index: 1 }, // mint at index 1
                 ],
-                false, // Not writable
-                false, // Not signer
-            )?,
+                false, // not writable
+                false, // not signer
+            )?
         ];
-
-        // Initialize the extra account metas account
-        ExtraAccountMetaList::init::<ExecuteInstruction>(
-            &mut ctx.accounts.extra_account_metas.try_borrow_mut_data()?,
-            &account_metas,
-        )?;
-
+        
+        // Initialize the ExtraAccountMetaList
+        let account_size = ExtraAccountMetaList::size_of(extra_account_metas.len()).unwrap();
+        
+        let account_info = &ctx.accounts.extra_account_meta_list.to_account_info();
+        account_info.assign(&crate::ID);
+        account_info.resize(account_size)?;
+        
+        let mut data = account_info.data.borrow_mut();
+        ExtraAccountMetaList::init::<InitializeExtraAccountMetaListInstruction>(&mut data, &extra_account_metas)?;
+        
+        msg!("Transfer hook initialized for token mint: {}", ctx.accounts.token_mint.key());
         Ok(())
     }
-    
-    // The transfer hook function name must be 'execute' for SPL Transfer Hook Interface
-    pub fn execute(ctx: Context<ExecuteTransferHook>, amount: u64) -> Result<()> {
-        transfer_hook_impl(&ctx, amount)
+
+    // The transfer hook execute instruction
+    #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
+    pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
+        let config = &ctx.accounts.transfer_hook_config;
+        
+        // If launch_time is 0, token hasn't launched yet - allow all transfers
+        if config.launch_time == 0 {
+            msg!("Token not launched yet, allowing transfer of {} tokens", amount);
+            return Ok(());
+        }
+        
+        let clock = Clock::get()?;
+        let elapsed = clock.unix_timestamp - config.launch_time;
+        
+        // If within anti-sniper period (10 minutes)
+        if elapsed > 0 && elapsed <= ANTI_SNIPER_DURATION {
+            let max_allowed = config.total_supply / 100; // 1% of total supply
+            
+            require!(
+                amount <= max_allowed,
+                TransferHookError::TransferLimitExceeded
+            );
+            
+            msg!(
+                "Anti-sniper active: Transfer of {} tokens allowed (max: {})",
+                amount,
+                max_allowed
+            );
+        } else {
+            msg!("Anti-sniper period ended, allowing transfer of {} tokens", amount);
+        }
+        
+        Ok(())
+    }
+
+    pub fn set_launch_time(ctx: Context<SetLaunchTime>) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        
+        require!(
+            config.launch_time == 0,
+            TransferHookError::AlreadyLaunched
+        );
+        
+        config.launch_time = Clock::get()?.unix_timestamp;
+        msg!("Launch time set: {}", config.launch_time);
+        
+        Ok(())
+    }
+
+    pub fn update_authority(
+        ctx: Context<UpdateAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        config.authority = new_authority;
+        msg!("Authority updated to: {}", new_authority);
+        Ok(())
     }
 }
 
-// Helper function to implement the transfer hook logic
-fn transfer_hook_impl(ctx: &Context<ExecuteTransferHook>, amount: u64) -> Result<()> {
-    let config = &ctx.accounts.hook_config;
-    let clock = Clock::get()?;
-    
-    // If launch has not happened yet, allow all transfers
-    if config.launch_timestamp == 0 || !config.anti_sniper_active {
-        return Ok(());
-    }
-    
-    // Check if we are still in the anti-sniper period
-    let elapsed = clock.unix_timestamp - config.launch_timestamp;
-    if elapsed >= ANTI_SNIPER_DURATION {
-        // Anti-sniper period has ended, allow all transfers
-        return Ok(());
-    }
-    
-    // We are in the anti-sniper period, check the transfer amount
-    let max_allowed = config.total_supply
-        .checked_mul(ANTI_SNIPER_LIMIT_BPS)
-        .unwrap()
-        .checked_div(10000)
-        .unwrap();
-    
-    require!(amount <= max_allowed, TransferHookError::ExceedsAntiSniperLimit);
-    
-    msg!("Transfer of {} allowed (max: {})", amount, max_allowed);
-    Ok(())
-}
-
-// Account structures
 #[derive(Accounts)]
-pub struct Initialize<'info> {
+pub struct InitializeExtraAccountMetaList<'info> {
     #[account(
         init,
         payer = payer,
-        space = TransferHookConfig::LEN,
-        seeds = [HOOK_CONFIG_SEED, mint.key().as_ref()],
+        space = 8 + TransferHookConfig::INIT_SPACE,
+        seeds = [TRANSFER_HOOK_CONFIG_SEED, token_mint.key().as_ref()],
         bump
     )]
-    pub hook_config: Account<'info, TransferHookConfig>,
+    pub transfer_hook_config: Account<'info, TransferHookConfig>,
     
-    pub mint: InterfaceAccount<'info, Mint>,
+    /// CHECK: Extra account meta list
+    #[account(
+        init,
+        payer = payer,
+        space = ExtraAccountMetaList::size_of(1).unwrap(),
+        seeds = [b"extra-account-metas", token_mint.key().as_ref()],
+        bump
+    )]
+    pub extra_account_meta_list: UncheckedAccount<'info>,
+    
+    /// CHECK: The token mint this hook is for
+    pub token_mint: UncheckedAccount<'info>,
+    
     pub authority: Signer<'info>,
     
     #[account(mut)]
     pub payer: Signer<'info>,
+    
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Execute<'info> {
+    /// CHECK: Source token account
+    pub source_token: UncheckedAccount<'info>,
+    
+    /// CHECK: Token mint
+    pub mint: UncheckedAccount<'info>,
+    
+    /// CHECK: Destination token account
+    pub destination_token: UncheckedAccount<'info>,
+    
+    /// CHECK: Source token account owner
+    pub owner: UncheckedAccount<'info>,
+    
+    /// CHECK: Extra account meta list
+    pub extra_account_meta_list: UncheckedAccount<'info>,
+    
+    // Our custom account - the config PDA
+    #[account(
+        seeds = [TRANSFER_HOOK_CONFIG_SEED, mint.key().as_ref()],
+        bump
+    )]
+    pub transfer_hook_config: Account<'info, TransferHookConfig>,
 }
 
 #[derive(Accounts)]
 pub struct SetLaunchTime<'info> {
     #[account(
         mut,
-        seeds = [HOOK_CONFIG_SEED, hook_config.mint.as_ref()],
-        bump = hook_config.bump
+        seeds = [TRANSFER_HOOK_CONFIG_SEED, config.token_mint.as_ref()],
+        bump,
+        constraint = config.authority == authority.key() @ TransferHookError::Unauthorized
     )]
-    pub hook_config: Account<'info, TransferHookConfig>,
+    pub config: Account<'info, TransferHookConfig>,
     
     pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct InitializeExtraAccountMetas<'info> {
+pub struct UpdateAuthority<'info> {
     #[account(
-        init,
-        payer = payer,
-        space = ExtraAccountMetaList::size_of(1).unwrap(),
-        seeds = [EXTRA_ACCOUNT_METAS_SEED, mint.key().as_ref()],
-        bump
+        mut,
+        seeds = [TRANSFER_HOOK_CONFIG_SEED, config.token_mint.as_ref()],
+        bump,
+        constraint = config.authority == authority.key() @ TransferHookError::Unauthorized
     )]
-    /// CHECK: This account is validated by the SPL Token-2022 program
-    pub extra_account_metas: UncheckedAccount<'info>,
+    pub config: Account<'info, TransferHookConfig>,
     
-    pub mint: InterfaceAccount<'info, Mint>,
     pub authority: Signer<'info>,
-    
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-pub struct ExecuteTransferHook<'info> {
-    #[account(
-        seeds = [HOOK_CONFIG_SEED, source_token.mint.as_ref()],
-        bump = hook_config.bump
-    )]
-    pub hook_config: Account<'info, TransferHookConfig>,
-    
-    #[account(
-        token::token_program = token_program
-    )]
-    pub source_token: InterfaceAccount<'info, TokenAccount>,
-    
-    #[account(
-        token::token_program = token_program
-    )]
-    pub dest_token: InterfaceAccount<'info, TokenAccount>,
-    
-    /// CHECK: This can be any account that triggers the transfer
-    pub authority: UncheckedAccount<'info>,
-    
-    /// CHECK: Extra accounts are validated by the transfer hook interface
-    pub extra_account_metas: UncheckedAccount<'info>,
-    
-    /// CHECK: Validated by the Token-2022 program
-    pub token_program: UncheckedAccount<'info>,
-}
-
-// State structures
 #[account]
+#[derive(InitSpace)]
 pub struct TransferHookConfig {
-    pub mint: Pubkey,
-    pub authority: Pubkey,
+    pub launch_time: i64,
+    pub token_mint: Pubkey,
     pub total_supply: u64,
-    pub launch_timestamp: i64,
-    pub anti_sniper_active: bool,
-    pub bump: u8,
+    pub authority: Pubkey,
 }
 
-impl TransferHookConfig {
-    pub const LEN: usize = 8 + // discriminator
-        32 + // mint
-        32 + // authority
-        8 + // total_supply
-        8 + // launch_timestamp
-        1 + // anti_sniper_active
-        1; // bump
+#[error_code]
+pub enum TransferHookError {
+    #[msg("Transfer limit exceeded during anti-sniper period")]
+    TransferLimitExceeded,
+    
+    #[msg("Already launched")]
+    AlreadyLaunched,
+    
+    #[msg("Unauthorized")]
+    Unauthorized,
 }

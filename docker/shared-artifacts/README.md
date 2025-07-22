@@ -1,25 +1,59 @@
-# Shared Artifacts
+# Shared Artifacts Directory
 
-This directory contains shared artifacts between Docker containers for different phases of MIKO token development.
+This directory contains shared data between Docker phases. All phases mount this directory as a volume to share critical information.
 
 ## Artifact Files
 
 ### programs.json
-Contains deployed program IDs for all on-chain programs:
-- absoluteVault: Absolute Vault program ID
-- smartDial: Smart Dial program ID  
-- transferHook: Transfer Hook program ID
+Contains deployed program IDs and metadata:
+```json
+{
+  "absoluteVault": {
+    "programId": "...",
+    "deployedAt": "...",
+    "network": "devnet"
+  },
+  "smartDial": {
+    "programId": "...",
+    "deployedAt": "...",
+    "network": "devnet"
+  },
+  "transferHook": {
+    "programId": "...",
+    "deployedAt": "...",
+    "network": "devnet"
+  }
+}
+```
 
-### token.json
+### token-info.json
 Contains MIKO token creation details:
-- mint: Token mint address
-- vaultPDA: Vault Program Derived Address
-- withdrawWithheldAuthority: Authority for withdrawing withheld fees
-- transferFeeConfigAuthority: Authority for fee configuration
-- mintAuthority: Should be null (revoked)
-- freezeAuthority: Should be null
-- createdAt: Token creation timestamp
+```json
+{
+  "mint": "...",
+  "totalSupply": "1000000000",
+  "temporaryAuthority": "... (deployer)",
+  "freezeAuthority": null,
+  "createdAt": "...",
+  "verified": {
+    "totalSupplyMinted": true,
+    "inDeployerWallet": true,
+    "transferFeeActive": true,
+    "hookProgramLinked": true
+  }
+}
+```
 
 ## Usage
 
-These files are mounted as volumes in Docker containers to share critical information between development phases without hardcoding values.
+Each phase reads from and writes to these files:
+- Phase 1: Writes program IDs after deployment
+- Phase 2: Reads program IDs, writes token info
+- Phase 3: Reads both program IDs and token info
+- Phase 4: Reads all artifacts for keeper bot configuration
+
+## Important Notes
+
+- Never manually edit these files during deployment
+- Always verify file contents before proceeding to next phase
+- Backup these files after successful deployment

@@ -6,7 +6,7 @@ describe("miko_programs", () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
 
-  const program = anchor.workspace.MikoPrograms as Program<MikoPrograms>;
+  const program = anchor.workspace.mikoPrograms as Program<MikoPrograms>;
 
   it("Is initialized!", async () => {
     // Add your test here.

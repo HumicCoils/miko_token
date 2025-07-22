@@ -1,0 +1,309 @@
+{
+  "address": "6nwvggz3Hoi2YEzsMbuHD8hEYtUmd7B8HxUJd9oRvgrw",
+  "metadata": {
+    "name": "smart_dial",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "MIKO Token Smart Dial Program"
+  },
+  "instructions": [
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "dial_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  109,
+                  97,
+                  114,
+                  116,
+                  45,
+                  100,
+                  105,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "treasury",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_authority",
+      "discriminator": [
+        32,
+        46,
+        64,
+        28,
+        149,
+        75,
+        243,
+        88
+      ],
+      "accounts": [
+        {
+          "name": "dial_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  109,
+                  97,
+                  114,
+                  116,
+                  45,
+                  100,
+                  105,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_reward_token",
+      "discriminator": [
+        17,
+        122,
+        67,
+        136,
+        110,
+        176,
+        161,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "dial_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  109,
+                  97,
+                  114,
+                  116,
+                  45,
+                  100,
+                  105,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_reward_token",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_treasury",
+      "discriminator": [
+        60,
+        16,
+        243,
+        66,
+        96,
+        59,
+        254,
+        131
+      ],
+      "accounts": [
+        {
+          "name": "dial_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  109,
+                  97,
+                  114,
+                  116,
+                  45,
+                  100,
+                  105,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_treasury",
+          "type": "pubkey"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "DialState",
+      "discriminator": [
+        139,
+        207,
+        143,
+        53,
+        210,
+        124,
+        253,
+        102
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
+    },
+    {
+      "code": 6001,
+      "name": "NotMonday",
+      "msg": "Not Monday (UTC)"
+    },
+    {
+      "code": 6002,
+      "name": "UpdateCooldown",
+      "msg": "24-hour update cooldown not met"
+    },
+    {
+      "code": 6003,
+      "name": "FirstMondayNotReached",
+      "msg": "First Monday after launch not reached"
+    }
+  ],
+  "types": [
+    {
+      "name": "DialState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "current_reward_token",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "last_update",
+            "type": "i64"
+          },
+          {
+            "name": "launch_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "update_history",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "UpdateEntry"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpdateEntry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "old_token",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_token",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}

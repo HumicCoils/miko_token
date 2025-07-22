@@ -1,35 +1,18 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program::invoke_signed;
 use anchor_spl::token_2022::{self, Token2022};
-use anchor_spl::token_interface::{TokenInterface, Mint, TokenAccount};
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
+use spl_token_2022::extension::transfer_fee::instruction::{
+    harvest_withheld_tokens_to_mint, set_transfer_fee, withdraw_withheld_tokens_from_accounts,
+};
 
-declare_id!("5hVLxMW58Vaax1kWt9Xme3AoS5ZwUfGaCi34eDiaFAzu");
+declare_id!("4ieMsf7qFmh1W5FwcaX6M3fz3NNyaGy3FyuXoKJLrRDq");
 
-const MAX_EXCLUSIONS: usize = 100;
-const HARVEST_THRESHOLD: u64 = 500_000_000_000; // 500k tokens with 6 decimals
-const VAULT_SEED: &[u8] = b"vault";
-
-// Error codes
-#[error_code]
-pub enum VaultError {
-    #[msg("Invalid fee percentage")]
-    InvalidFee,
-    #[msg("Launch time already set")]
-    LaunchTimeAlreadySet,
-    #[msg("Not authorized")]
-    Unauthorized,
-    #[msg("Fees already finalized")]
-    FeesFinalized,
-    #[msg("Launch time not set")]
-    LaunchTimeNotSet,
-    #[msg("Harvest threshold not met")]
-    ThresholdNotMet,
-    #[msg("Emergency pause active")]
-    EmergencyPause,
-    #[msg("Exclusion list full")]
-    ExclusionListFull,
-    #[msg("Invalid distribution percentage")]
-    InvalidDistribution,
-}
+pub const VAULT_SEED: &[u8] = b"vault";
+pub const MAX_EXCLUSIONS: u64 = 100;
+pub const HARVEST_THRESHOLD: u64 = 500_000_000_000_000; // 500k MIKO with 9 decimals
+pub const OWNER_TAX_SHARE: u64 = 20; // 20% to owner
+pub const HOLDERS_TAX_SHARE: u64 = 80; // 80% to holders
 
 #[program]
 pub mod absolute_vault {
@@ -37,142 +20,234 @@ pub mod absolute_vault {
 
     pub fn initialize(
         ctx: Context<Initialize>,
-        minimum_hold_amount: u64,
+        authority: Pubkey,
+        treasury: Pubkey,
+        owner_wallet: Pubkey,
+        keeper_authority: Pubkey,
+        min_hold_amount: u64,
     ) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         
-        // Set core parameters
-        vault.bump = ctx.bumps.vault;
-        vault.mint = ctx.accounts.mint.key();
-        vault.owner = ctx.accounts.owner.key();
-        vault.treasury = ctx.accounts.treasury.key();
-        vault.keeper = ctx.accounts.keeper.key();
-        
-        // Initialize fee management
+        vault.authority = authority;
+        vault.treasury = treasury;
+        vault.owner_wallet = owner_wallet;
+        vault.token_mint = ctx.accounts.token_mint.key();
+        vault.min_hold_amount = min_hold_amount;
+        vault.keeper_authority = keeper_authority;
         vault.launch_timestamp = 0;
         vault.fee_finalized = false;
-        vault.current_fee_bps = 3000; // 30% initial fee
-        
-        // Set harvest configuration
         vault.harvest_threshold = HARVEST_THRESHOLD;
-        vault.last_harvest_timestamp = 0;
-        vault.total_harvested = 0;
+        vault.total_fees_harvested = 0;
+        vault.total_rewards_distributed = 0;
+        vault.last_harvest_time = 0;
+        vault.last_distribution_time = 0;
         
-        // Initialize exclusion lists with auto-exclusions
+        // Auto-exclude system accounts
         vault.fee_exclusions = vec![
-            ctx.accounts.owner.key(),
-            ctx.accounts.treasury.key(),
-            ctx.accounts.keeper.key(),
-            ctx.program_id.key(),
+            owner_wallet,
+            treasury,
+            keeper_authority,
+            crate::ID, // Vault program ID
+            vault.key(), // Vault PDA
+        ];
+        
+        vault.reward_exclusions = vec![
+            owner_wallet,
+            treasury,
+            keeper_authority,
+            crate::ID,
             vault.key(),
         ];
-        vault.reward_exclusions = vec![];
         
-        // Set emergency and config flags
-        vault.emergency_pause = false;
-        vault.config_locked = false;
-        
-        // Set batch and distribution parameters
-        vault.batch_size_limit = 30; // Max accounts per batch
-        vault.owner_share_bps = 2000; // 20% to owner
-        vault.minimum_hold_amount = minimum_hold_amount;
-        
-        // Default reward token to native SOL
-        vault.reward_token_mint = spl_token_2022::native_mint::ID;
-        
-        // Initialize statistics
-        vault.total_distributions = 0;
-        vault.total_fees_collected = 0;
-        
-        // Clear reserved space
-        vault.reserved = [0u64; 16];
-        
-        msg!("Vault initialized for mint {}", ctx.accounts.mint.key());
+        msg!("Vault initialized with auto-exclusions");
         Ok(())
     }
-    
+
     pub fn set_launch_time(ctx: Context<SetLaunchTime>) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         
-        require!(vault.launch_timestamp == 0, VaultError::LaunchTimeAlreadySet);
-        require!(!vault.emergency_pause, VaultError::EmergencyPause);
+        require!(
+            vault.launch_timestamp == 0,
+            VaultError::AlreadyLaunched
+        );
         
         vault.launch_timestamp = Clock::get()?.unix_timestamp;
+        msg!("Launch timestamp set: {}", vault.launch_timestamp);
         
-        msg!("Launch time set to {}", vault.launch_timestamp);
         Ok(())
     }
-    
-    pub fn update_transfer_fee(ctx: Context<UpdateTransferFee>) -> Result<()> {
-        let vault = &mut ctx.accounts.vault;
+
+    pub fn update_transfer_fee(ctx: Context<UpdateTransferFee>, new_fee_bps: u16) -> Result<()> {
         let clock = Clock::get()?;
         
-        require!(vault.launch_timestamp != 0, VaultError::LaunchTimeNotSet);
-        require!(!vault.fee_finalized, VaultError::FeesFinalized);
-        require!(!vault.emergency_pause, VaultError::EmergencyPause);
-        
-        let elapsed = clock.unix_timestamp - vault.launch_timestamp;
-        
-        // 0-5 minutes: 30%
-        // 5-10 minutes: 15%
-        // 10+ minutes: 5% (permanent)
-        let new_fee_bps = if elapsed < 300 {
-            3000 // 30%
-        } else if elapsed < 600 {
-            1500 // 15%
-        } else {
-            vault.fee_finalized = true;
-            500 // 5%
+        let (token_mint_key, vault_key, expected_fee_bps) = {
+            let vault = &mut ctx.accounts.vault;
+            
+            require!(
+                vault.launch_timestamp > 0,
+                VaultError::NotLaunched
+            );
+            
+            require!(
+                !vault.fee_finalized,
+                VaultError::FeeFinalized
+            );
+            
+            let elapsed = clock.unix_timestamp - vault.launch_timestamp;
+            let expected_fee_bps = match elapsed {
+                0..=299 => 3000u16,      // 0-5 minutes: 30%
+                300..=599 => 1500u16,    // 5-10 minutes: 15%
+                _ => {
+                    vault.fee_finalized = true;
+                    500u16               // 10+ minutes: 5% (final)
+                }
+            };
+            
+            (vault.token_mint, vault.key(), expected_fee_bps)
         };
         
-        if vault.current_fee_bps != new_fee_bps {
-            vault.current_fee_bps = new_fee_bps;
-            
-            // Here we would make CPI call to update the token's transfer fee
-            // This requires the actual Token-2022 CPI implementation
-            
-            msg!("Transfer fee updated to {} bps", new_fee_bps);
-        }
+        require!(
+            new_fee_bps == expected_fee_bps,
+            VaultError::InvalidFeePercentage
+        );
+        
+        // CPI to update transfer fee
+        let seeds = &[
+            VAULT_SEED,
+            token_mint_key.as_ref(),
+            &[ctx.bumps.vault]
+        ];
+        let signer_seeds = &[&seeds[..]];
+        
+        let ix = set_transfer_fee(
+            &ctx.accounts.token_program.key(),
+            &ctx.accounts.token_mint.key(),
+            &vault_key,
+            &[],
+            new_fee_bps,
+            u64::MAX,
+        )?;
+        
+        invoke_signed(
+            &ix,
+            &[
+                ctx.accounts.token_mint.to_account_info(),
+                ctx.accounts.vault.to_account_info(),
+            ],
+            signer_seeds,
+        )?;
+        
+        msg!("Transfer fee updated to {} basis points", new_fee_bps);
         
         Ok(())
     }
-    
-    pub fn harvest_fees(ctx: Context<HarvestFees>) -> Result<()> {
-        let vault = &ctx.accounts.vault;
-        
-        require!(!vault.emergency_pause, VaultError::EmergencyPause);
-        
-        // Here we would implement the harvest logic
-        // This involves CPI to Token-2022 harvest instruction
-        
-        msg!("Fees harvested");
-        Ok(())
-    }
-    
-    pub fn distribute_rewards(ctx: Context<DistributeRewards>) -> Result<()> {
-        let vault = &mut ctx.accounts.vault;
-        
-        require!(!vault.emergency_pause, VaultError::EmergencyPause);
-        
-        // Distribution logic would go here
-        // This involves calculating holder shares and transferring rewards
-        
-        vault.total_distributions += 1;
-        
-        msg!("Rewards distributed");
-        Ok(())
-    }
-    
-    pub fn manage_exclusions(
-        ctx: Context<ManageExclusions>,
-        action: ExclusionAction,
-        address: Pubkey,
-        list_type: ExclusionListType,
+
+    pub fn harvest_fees<'info>(
+        ctx: Context<'_, '_, '_, 'info, HarvestFees<'info>>, 
+        accounts: Vec<Pubkey>
     ) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         
-        require!(ctx.accounts.authority.key() == vault.owner, VaultError::Unauthorized);
-        require!(!vault.config_locked, VaultError::Unauthorized);
+        require!(
+            accounts.len() > 0 && accounts.len() <= 20,
+            VaultError::InvalidBatchSize
+        );
+        
+        // Build harvest instruction
+        let seeds = &[
+            VAULT_SEED,
+            vault.token_mint.as_ref(),
+            &[ctx.bumps.vault]
+        ];
+        let signer_seeds = &[&seeds[..]];
+        
+        // Convert Vec<Pubkey> to Vec<&Pubkey>
+        let account_refs: Vec<&Pubkey> = accounts.iter().collect();
+        
+        let ix = harvest_withheld_tokens_to_mint(
+            &ctx.accounts.token_program.key(),
+            &ctx.accounts.token_mint.key(),
+            &account_refs,
+        )?;
+        
+        // Collect all account infos - first the mint, then all remaining accounts
+        let mut account_infos = vec![ctx.accounts.token_mint.to_account_info()];
+        account_infos.extend(ctx.remaining_accounts.iter().cloned());
+        
+        invoke_signed(
+            &ix,
+            &account_infos,
+            signer_seeds,
+        )?;
+        
+        vault.last_harvest_time = Clock::get()?.unix_timestamp;
+        vault.total_fees_harvested = vault.total_fees_harvested.saturating_add(1);
+        
+        msg!("Harvested fees from {} accounts", accounts.len());
+        
+        Ok(())
+    }
+
+    pub fn distribute_rewards(
+        ctx: Context<DistributeRewards>,
+        owner_amount: u64,
+        total_distributed: u64,
+    ) -> Result<()> {
+        let vault_ref = &ctx.accounts.vault;
+        
+        // Verify correct split: 20% to owner, 80% to holders
+        let expected_owner_amount = total_distributed
+            .checked_mul(OWNER_TAX_SHARE)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(100)
+            .ok_or(VaultError::MathOverflow)?;
+        
+        require!(
+            owner_amount == expected_owner_amount,
+            VaultError::InvalidDistributionSplit
+        );
+        
+        // Transfer owner's share
+        let seeds = &[
+            VAULT_SEED,
+            vault_ref.token_mint.as_ref(),
+            &[ctx.bumps.vault]
+        ];
+        let signer_seeds = &[&seeds[..]];
+        
+        token_2022::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token_2022::TransferChecked {
+                    from: ctx.accounts.vault_token_account.to_account_info(),
+                    mint: ctx.accounts.token_mint.to_account_info(),
+                    to: ctx.accounts.owner_token_account.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            owner_amount,
+            9, // MIKO decimals
+        )?;
+        
+        // Update vault state
+        let vault_mut = &mut ctx.accounts.vault;
+        vault_mut.last_distribution_time = Clock::get()?.unix_timestamp;
+        vault_mut.total_rewards_distributed = vault_mut.total_rewards_distributed
+            .saturating_add(total_distributed);
+        
+        msg!("Distributed {} total rewards, {} to owner", total_distributed, owner_amount);
+        
+        Ok(())
+    }
+
+    pub fn manage_exclusions(
+        ctx: Context<ManageExclusions>,
+        action: ExclusionAction,
+        list_type: ExclusionListType,
+        wallet: Pubkey,
+    ) -> Result<()> {
+        let vault = &mut ctx.accounts.vault;
         
         let list = match list_type {
             ExclusionListType::Fee => &mut vault.fee_exclusions,
@@ -181,94 +256,150 @@ pub mod absolute_vault {
         
         match action {
             ExclusionAction::Add => {
-                require!(list.len() < MAX_EXCLUSIONS, VaultError::ExclusionListFull);
-                if !list.contains(&address) {
-                    list.push(address);
-                }
-            },
+                require!(
+                    list.len() < MAX_EXCLUSIONS as usize,
+                    VaultError::ExclusionListFull
+                );
+                require!(
+                    !list.contains(&wallet),
+                    VaultError::AlreadyExcluded
+                );
+                list.push(wallet);
+                msg!("Added {} to {:?} exclusions", wallet, list_type);
+            }
             ExclusionAction::Remove => {
-                list.retain(|&x| x != address);
-            },
+                list.retain(|&x| x != wallet);
+                msg!("Removed {} from {:?} exclusions", wallet, list_type);
+            }
         }
         
         Ok(())
     }
-    
+
     pub fn update_config(
         ctx: Context<UpdateConfig>,
         new_treasury: Option<Pubkey>,
-        new_keeper: Option<Pubkey>,
-        new_batch_size: Option<u16>,
-        new_minimum_hold: Option<u64>,
+        new_owner_wallet: Option<Pubkey>,
+        new_min_hold_amount: Option<u64>,
+        new_harvest_threshold: Option<u64>,
     ) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
-        
-        require!(ctx.accounts.authority.key() == vault.owner, VaultError::Unauthorized);
-        require!(!vault.config_locked, VaultError::Unauthorized);
         
         if let Some(treasury) = new_treasury {
             vault.treasury = treasury;
         }
-        
-        if let Some(keeper) = new_keeper {
-            vault.keeper = keeper;
+        if let Some(owner) = new_owner_wallet {
+            vault.owner_wallet = owner;
+        }
+        if let Some(min_hold) = new_min_hold_amount {
+            vault.min_hold_amount = min_hold;
+        }
+        if let Some(threshold) = new_harvest_threshold {
+            vault.harvest_threshold = threshold;
         }
         
-        if let Some(batch_size) = new_batch_size {
-            vault.batch_size_limit = batch_size;
-        }
-        
-        if let Some(minimum) = new_minimum_hold {
-            vault.minimum_hold_amount = minimum;
-        }
-        
+        msg!("Vault configuration updated");
         Ok(())
     }
-    
-    pub fn emergency_withdraw_vault(ctx: Context<EmergencyWithdraw>) -> Result<()> {
+
+    pub fn emergency_withdraw_vault(
+        ctx: Context<EmergencyWithdraw>,
+        amount: u64,
+    ) -> Result<()> {
         let vault = &ctx.accounts.vault;
         
-        require!(ctx.accounts.authority.key() == vault.owner, VaultError::Unauthorized);
+        let seeds = &[
+            VAULT_SEED,
+            vault.token_mint.as_ref(),
+            &[ctx.bumps.vault]
+        ];
+        let signer_seeds = &[&seeds[..]];
         
-        // Emergency withdrawal logic here
-        // Transfer all vault-owned tokens/SOL to owner
+        token_2022::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token_2022::TransferChecked {
+                    from: ctx.accounts.vault_token_account.to_account_info(),
+                    mint: ctx.accounts.token_mint.to_account_info(),
+                    to: ctx.accounts.destination_token_account.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            amount,
+            9, // MIKO decimals
+        )?;
         
-        msg!("Emergency withdrawal executed");
+        msg!("Emergency withdrawal of {} tokens completed", amount);
         Ok(())
     }
-    
-    pub fn emergency_withdraw_withheld(ctx: Context<EmergencyWithdrawWithheld>) -> Result<()> {
+
+    pub fn emergency_withdraw_withheld<'info>(
+        ctx: Context<'_, '_, '_, 'info, EmergencyWithdrawWithheld<'info>>,
+        accounts: Vec<Pubkey>,
+    ) -> Result<()> {
         let vault = &ctx.accounts.vault;
         
-        require!(ctx.accounts.authority.key() == vault.owner, VaultError::Unauthorized);
+        require!(
+            accounts.len() > 0 && accounts.len() <= 20,
+            VaultError::InvalidBatchSize
+        );
         
-        // Withdraw withheld fees logic here
-        // This uses Token-2022 specific functionality
+        let seeds = &[
+            VAULT_SEED,
+            vault.token_mint.as_ref(),
+            &[ctx.bumps.vault]
+        ];
+        let signer_seeds = &[&seeds[..]];
         
-        msg!("Withheld fees withdrawn");
+        // Convert Vec<Pubkey> to Vec<&Pubkey>
+        let account_refs: Vec<&Pubkey> = accounts.iter().collect();
+        
+        let ix = withdraw_withheld_tokens_from_accounts(
+            &ctx.accounts.token_program.key(),
+            &ctx.accounts.token_mint.key(),
+            &ctx.accounts.destination_token_account.key(),
+            &vault.key(),
+            &[],
+            &account_refs,
+        )?;
+        
+        // Collect all account infos properly
+        let mut account_infos = vec![
+            ctx.accounts.token_mint.to_account_info(),
+            ctx.accounts.destination_token_account.to_account_info(),
+            ctx.accounts.vault.to_account_info(),
+        ];
+        account_infos.extend(ctx.remaining_accounts.iter().cloned());
+        
+        invoke_signed(
+            &ix,
+            &account_infos,
+            signer_seeds,
+        )?;
+        
+        msg!("Emergency withdrawal of withheld tokens from {} accounts", accounts.len());
         Ok(())
     }
 }
 
-// Account structures
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(
         init,
         payer = payer,
-        space = VaultState::LEN,
-        seeds = [VAULT_SEED, mint.key().as_ref()],
+        space = 8 + VaultState::INIT_SPACE,
+        seeds = [VAULT_SEED, token_mint.key().as_ref()],
         bump
     )]
     pub vault: Account<'info, VaultState>,
     
-    pub mint: InterfaceAccount<'info, Mint>,
-    pub owner: Signer<'info>,
-    pub treasury: UncheckedAccount<'info>,
-    pub keeper: UncheckedAccount<'info>,
+    /// CHECK: Token mint address
+    pub token_mint: UncheckedAccount<'info>,
     
     #[account(mut)]
     pub payer: Signer<'info>,
+    
     pub system_program: Program<'info, System>,
 }
 
@@ -276,12 +407,10 @@ pub struct Initialize<'info> {
 pub struct SetLaunchTime<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        constraint = vault.authority == authority.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
-    #[account(constraint = authority.key() == vault.owner || authority.key() == vault.keeper)]
     pub authority: Signer<'info>,
 }
 
@@ -289,53 +418,69 @@ pub struct SetLaunchTime<'info> {
 pub struct UpdateTransferFee<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        seeds = [VAULT_SEED, vault.token_mint.as_ref()],
+        bump,
+        constraint = vault.keeper_authority == keeper.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
-    #[account(constraint = authority.key() == vault.keeper)]
-    pub authority: Signer<'info>,
+    pub keeper: Signer<'info>,
     
-    // Token-2022 accounts would be added here
+    /// CHECK: Token mint
+    #[account(mut)]
+    pub token_mint: UncheckedAccount<'info>,
+    
+    pub token_program: Program<'info, Token2022>,
 }
 
 #[derive(Accounts)]
 pub struct HarvestFees<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        seeds = [VAULT_SEED, vault.token_mint.as_ref()],
+        bump,
+        constraint = vault.keeper_authority == keeper.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
-    #[account(constraint = authority.key() == vault.keeper)]
-    pub authority: Signer<'info>,
+    pub keeper: Signer<'info>,
     
-    // Additional accounts for harvest operation
+    /// CHECK: Token mint
+    #[account(mut)]
+    pub token_mint: UncheckedAccount<'info>,
+    
+    pub token_program: Program<'info, Token2022>,
 }
 
 #[derive(Accounts)]
 pub struct DistributeRewards<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        seeds = [VAULT_SEED, vault.token_mint.as_ref()],
+        bump,
+        constraint = vault.keeper_authority == keeper.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
-    #[account(constraint = authority.key() == vault.keeper)]
-    pub authority: Signer<'info>,
+    pub keeper: Signer<'info>,
     
-    // Distribution accounts would be added here
+    #[account(mut)]
+    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub owner_token_account: InterfaceAccount<'info, TokenAccount>,
+    
+    /// CHECK: Token mint
+    pub token_mint: UncheckedAccount<'info>,
+    
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
 pub struct ManageExclusions<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        constraint = vault.authority == authority.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
@@ -346,8 +491,7 @@ pub struct ManageExclusions<'info> {
 pub struct UpdateConfig<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        constraint = vault.authority == authority.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
@@ -358,118 +502,114 @@ pub struct UpdateConfig<'info> {
 pub struct EmergencyWithdraw<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        seeds = [VAULT_SEED, vault.token_mint.as_ref()],
+        bump,
+        constraint = vault.authority == authority.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
     pub authority: Signer<'info>,
     
-    // Emergency withdrawal accounts
+    #[account(mut)]
+    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub destination_token_account: InterfaceAccount<'info, TokenAccount>,
+    
+    /// CHECK: Token mint
+    pub token_mint: UncheckedAccount<'info>,
+    
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
 pub struct EmergencyWithdrawWithheld<'info> {
     #[account(
         mut,
-        seeds = [VAULT_SEED, vault.mint.as_ref()],
-        bump = vault.bump
+        seeds = [VAULT_SEED, vault.token_mint.as_ref()],
+        bump,
+        constraint = vault.authority == authority.key() @ VaultError::Unauthorized
     )]
     pub vault: Account<'info, VaultState>,
     
     pub authority: Signer<'info>,
     
-    // Token-2022 specific accounts
+    /// CHECK: Token mint
+    #[account(mut)]
+    pub token_mint: UncheckedAccount<'info>,
+    
+    #[account(mut)]
+    pub destination_token_account: InterfaceAccount<'info, TokenAccount>,
+    
+    pub token_program: Program<'info, Token2022>,
 }
 
-// State structures
 #[account]
+#[derive(InitSpace)]
 pub struct VaultState {
-    pub bump: u8,
-    
-    // Core token information
-    pub mint: Pubkey,
-    
-    // Authority addresses
-    pub owner: Pubkey,
+    pub authority: Pubkey,
     pub treasury: Pubkey,
-    pub keeper: Pubkey,
-    
-    // Launch and fee management
+    pub owner_wallet: Pubkey,
+    pub token_mint: Pubkey,
+    pub min_hold_amount: u64,
+    #[max_len(100)]
+    pub fee_exclusions: Vec<Pubkey>,
+    #[max_len(100)]
+    pub reward_exclusions: Vec<Pubkey>,
+    pub keeper_authority: Pubkey,
     pub launch_timestamp: i64,
     pub fee_finalized: bool,
-    pub current_fee_bps: u16,
-    
-    // Harvest configuration
     pub harvest_threshold: u64,
-    pub last_harvest_timestamp: i64,
-    pub total_harvested: u64,
-    
-    // Exclusion lists for fee and reward management
-    pub fee_exclusions: Vec<Pubkey>,
-    pub reward_exclusions: Vec<Pubkey>,
-    
-    // Emergency and config flags
-    pub emergency_pause: bool,
-    pub config_locked: bool,
-    
-    // Batch operation support
-    pub batch_size_limit: u16,
-    
-    // Distribution settings
-    pub owner_share_bps: u16,
-    pub minimum_hold_amount: u64,
-    
-    // Rewards configuration
-    pub reward_token_mint: Pubkey,
-    
-    // Statistics
-    pub total_distributions: u64,
-    pub total_fees_collected: u64,
-    
-    // Reserved space for future upgrades
-    pub reserved: [u64; 16],
+    pub total_fees_harvested: u64,
+    pub total_rewards_distributed: u64,
+    pub last_harvest_time: i64,
+    pub last_distribution_time: i64,
 }
 
-impl VaultState {
-    pub const LEN: usize = 8 + // discriminator
-        1 + // bump
-        32 + // mint
-        32 + // owner
-        32 + // treasury
-        32 + // keeper
-        8 + // launch_timestamp
-        1 + // fee_finalized
-        2 + // current_fee_bps
-        8 + // harvest_threshold
-        8 + // last_harvest_timestamp
-        8 + // total_harvested
-        4 + (32 * MAX_EXCLUSIONS) + // fee_exclusions
-        4 + (32 * MAX_EXCLUSIONS) + // reward_exclusions
-        1 + // emergency_pause
-        1 + // config_locked
-        2 + // batch_size_limit
-        2 + // owner_share_bps
-        8 + // minimum_hold_amount
-        32 + // reward_token_mint
-        8 + // total_distributions
-        8 + // total_fees_collected
-        (8 * 16); // reserved
-    
-    pub fn seeds(mint: &Pubkey) -> Vec<Vec<u8>> {
-        vec![VAULT_SEED.to_vec(), mint.as_ref().to_vec()]
-    }
-}
-
-// Enums
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum ExclusionAction {
     Add,
     Remove,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ExclusionListType {
     Fee,
     Reward,
+}
+
+#[error_code]
+pub enum VaultError {
+    #[msg("Unauthorized")]
+    Unauthorized,
+    
+    #[msg("Already launched")]
+    AlreadyLaunched,
+    
+    #[msg("Not launched yet")]
+    NotLaunched,
+    
+    #[msg("Fee already finalized")]
+    FeeFinalized,
+    
+    #[msg("Exclusion list full")]
+    ExclusionListFull,
+    
+    #[msg("Already excluded")]
+    AlreadyExcluded,
+    
+    #[msg("Invalid fee percentage")]
+    InvalidFeePercentage,
+    
+    #[msg("Harvest threshold not met")]
+    HarvestThresholdNotMet,
+    
+    #[msg("Invalid batch size")]
+    InvalidBatchSize,
+    
+    #[msg("Math overflow")]
+    MathOverflow,
+    
+    #[msg("Invalid distribution split")]
+    InvalidDistributionSplit,
 }

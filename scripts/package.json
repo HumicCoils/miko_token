@@ -1,0 +1,31 @@
+{
+  "name": "miko-token-scripts",
+  "version": "1.0.0",
+  "description": "Scripts for MIKO token deployment and management",
+  "main": "index.js",
+  "scripts": {
+    "phase2:create-token": "ts-node phase2/create-token.ts",
+    "phase2:verify": "ts-node phase2/verify-phase2.ts"
+  },
+  "keywords": [
+    "solana",
+    "token",
+    "miko"
+  ],
+  "author": "MIKO Labs",
+  "license": "MIT",
+  "dependencies": {
+    "@project-serum/anchor": "^0.26.0",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.2",
+    "@types/bn.js": "^5.2.0",
+    "bn.js": "^5.2.2",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
