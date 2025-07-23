@@ -40,6 +40,10 @@ async function initializePrograms() {
   const vaultIdl = JSON.parse(readFileSync(path.join(__dirname, 'phase4b-programs/target/idl/absolute_vault.json'), 'utf-8'));
   const smartDialIdl = JSON.parse(readFileSync(path.join(__dirname, 'phase4b-programs/target/idl/smart_dial.json'), 'utf-8'));
   
+  // Override IDL addresses with deployed program IDs
+  vaultIdl.address = config.programs.vault;
+  smartDialIdl.address = config.programs.smartDial;
+  
   // Create program instances
   const vaultProgram = new Program(vaultIdl, provider);
   const smartDialProgram = new Program(smartDialIdl, provider);
@@ -52,7 +56,6 @@ async function initializePrograms() {
     const vaultTx = await vaultProgram.methods
       .initialize(
         deployerKeypair.publicKey,    // authority (deployer)
-        treasuryKeypair.publicKey,    // treasury
         ownerKeypair.publicKey,       // owner_wallet
         keeperKeypair.publicKey,      // keeper_authority
         minHoldAmount
@@ -65,7 +68,6 @@ async function initializePrograms() {
     
     console.log('Vault initialized:', vaultTx);
     console.log('- Authority:', deployerKeypair.publicKey.toString());
-    console.log('- Treasury:', treasuryKeypair.publicKey.toString());
     console.log('- Owner:', ownerKeypair.publicKey.toString());
     console.log('- Keeper:', keeperKeypair.publicKey.toString());
     

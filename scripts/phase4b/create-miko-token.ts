@@ -31,28 +31,14 @@ async function createMikoToken() {
     new Uint8Array(JSON.parse(readFileSync(deployerPath, 'utf-8')))
   );
   
-  // Generate or load token mint keypair
-  const tokenMintPath = path.join(__dirname, 'miko-token-keypair.json');
-  let tokenMintKeypair: Keypair;
-  
-  if (existsSync(tokenMintPath)) {
-    tokenMintKeypair = Keypair.fromSecretKey(
-      new Uint8Array(JSON.parse(readFileSync(tokenMintPath, 'utf-8')))
-    );
-    console.log('Using existing token mint keypair:', tokenMintKeypair.publicKey.toString());
-  } else {
-    tokenMintKeypair = Keypair.generate();
-    writeFileSync(tokenMintPath, JSON.stringify(Array.from(tokenMintKeypair.secretKey)));
-    console.log('Generated new token mint keypair:', tokenMintKeypair.publicKey.toString());
-  }
+  // ALWAYS generate NEW token keypair - FUCK the old one
+  const tokenMintKeypair = Keypair.generate();
+  const timestamp = Date.now();
+  const tokenMintPath = path.join(__dirname, `miko-token-keypair-${timestamp}.json`);
+  writeFileSync(tokenMintPath, JSON.stringify(Array.from(tokenMintKeypair.secretKey)));
+  console.log('Generated NEW token mint keypair:', tokenMintKeypair.publicKey.toString());
   
   try {
-    // Check if mint already exists
-    const mintInfo = await connection.getAccountInfo(tokenMintKeypair.publicKey);
-    if (mintInfo) {
-      console.log('Token mint already exists:', tokenMintKeypair.publicKey.toString());
-      return tokenMintKeypair.publicKey;
-    }
     
     // Calculate space needed for mint with transfer fee extension
     const extensions = [ExtensionType.TransferFeeConfig];

@@ -1,38 +1,11 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { createLogger } from '../../keeper-bot/src/utils/logger';
-import BN from 'bn.js';
+import { parsePriceData, PriceData as PythPriceData, PriceStatus } from '@pythnetwork/client';
 
 const logger = createLogger('PythOracle');
 
 // Pyth Network SOL/USD price feed account on Solana mainnet
 const SOL_USD_PRICE_FEED_ACCOUNT = new PublicKey('H6ARHf6YXhGYeQfUzQNGk6rDNnLBQKrenN712K4AQJEG');
-
-// Pyth price account structure offsets
-const MAGIC_OFFSET = 0;
-const VERSION_OFFSET = 4;
-const ACCOUNT_TYPE_OFFSET = 8;
-const PRICE_TYPE_OFFSET = 12;
-const EXPONENT_OFFSET = 16;
-const NUM_COMPONENTS_OFFSET = 20;
-const LAST_SLOT_OFFSET = 24;
-const VALID_SLOT_OFFSET = 32;
-const PRODUCT_OFFSET = 40;
-const NEXT_OFFSET = 48;
-const PREVIOUS_SLOT_OFFSET = 56;
-const PREVIOUS_PRICE_OFFSET = 64;
-const PREVIOUS_CONFIDENCE_OFFSET = 72;
-const PREVIOUS_TIMESTAMP_OFFSET = 80;
-const AGGREGATE_PRICE_OFFSET = 88;
-const AGGREGATE_CONFIDENCE_OFFSET = 96;
-const AGGREGATE_STATUS_OFFSET = 104;
-const AGGREGATE_CORPORATE_ACTION_OFFSET = 108;
-const AGGREGATE_PUBLISH_SLOT_OFFSET = 112;
-
-// Constants
-const PRICE_ACCOUNT_SIZE = 3312;
-const MAGIC_NUMBER = 0xa1b2c3d4;
-const VERSION_2 = 2;
-const PRICE_ACCOUNT_TYPE = 3;
 
 export interface PriceData {
   price: number;
@@ -64,60 +37,50 @@ export class PythOracleIntegration {
         throw new Error('Price feed account not found');
       }
 
-      if (accountInfo.data.length !== PRICE_ACCOUNT_SIZE) {
-        throw new Error(`Invalid price account size: ${accountInfo.data.length}`);
-      }
-
-      // Parse the price data
-      const data = accountInfo.data;
-      
-      // Verify magic number and version
-      const magic = data.readUInt32LE(MAGIC_OFFSET);
-      if (magic !== MAGIC_NUMBER) {
-        throw new Error(`Invalid magic number: ${magic.toString(16)}`);
-      }
-
-      const version = data.readUInt32LE(VERSION_OFFSET);
-      if (version !== VERSION_2) {
-        throw new Error(`Unsupported version: ${version}`);
-      }
-
-      const accountType = data.readUInt32LE(ACCOUNT_TYPE_OFFSET);
-      if (accountType !== PRICE_ACCOUNT_TYPE) {
-        throw new Error(`Invalid account type: ${accountType}`);
-      }
-
-      // Extract price data
-      const exponent = data.readInt32LE(EXPONENT_OFFSET);
-      const priceComponent = data.readBigInt64LE(AGGREGATE_PRICE_OFFSET);
-      const confidenceComponent = data.readBigUInt64LE(AGGREGATE_CONFIDENCE_OFFSET);
-      const status = data.readUInt32LE(AGGREGATE_STATUS_OFFSET);
-      const publishSlot = data.readBigUInt64LE(AGGREGATE_PUBLISH_SLOT_OFFSET);
-      
-      // Convert price to decimal
-      const price = Number(priceComponent) * Math.pow(10, exponent);
-      const confidence = Number(confidenceComponent) * Math.pow(10, exponent);
-      
-      // Get current slot for timestamp estimation
+      // Parse using official Pyth SDK
       const currentSlot = await this.connection.getSlot();
-      const slotDiff = currentSlot - Number(publishSlot);
-      const estimatedAge = slotDiff * 0.4; // ~400ms per slot
-      const timestamp = Date.now() - (estimatedAge * 1000);
+      const pythPriceData = parsePriceData(accountInfo.data, currentSlot);
+      
+      if (!pythPriceData.price || !pythPriceData.confidence) {
+        throw new Error('Invalid price data from Pyth');
+      }
+
+      // Convert to decimal price
+      const price = pythPriceData.price;
+      const confidence = pythPriceData.confidence;
+      const exponent = pythPriceData.exponent;
+      
+      // Calculate decimal price
+      const decimalPrice = Number(price) * Math.pow(10, exponent);
+      const decimalConfidence = Number(confidence) * Math.pow(10, exponent);
+      
+      // Estimate timestamp from slot
+      // Solana produces ~2.5 blocks per second
+      const slotDiff = currentSlot - Number(pythPriceData.validSlot);
+      const ageSeconds = slotDiff * 0.4; // ~400ms per slot
+      const timestamp = Date.now() - (ageSeconds * 1000);
+      
+      // Determine status
+      let status: 'trading' | 'halted' | 'unknown' = 'unknown';
+      if (pythPriceData.status === PriceStatus.Trading) {
+        status = 'trading';
+      } else if (pythPriceData.status === PriceStatus.Halted) {
+        status = 'halted';
+      }
 
       const priceData: PriceData = {
-        price,
-        confidence,
+        price: decimalPrice,
+        confidence: decimalConfidence,
         exponent,
         timestamp,
-        slot: Number(publishSlot),
-        status: this.getStatusString(status),
+        slot: Number(pythPriceData.validSlot),
+        status,
       };
 
       logger.info('SOL/USD price fetched successfully:', {
-        price: `$${price.toFixed(2)}`,
-        confidence: `±$${confidence.toFixed(2)}`,
-        slot: publishSlot.toString(),
-        age: `${estimatedAge.toFixed(1)}s`,
+        price: `$${decimalPrice.toFixed(2)}`,
+        confidence: `±$${decimalConfidence.toFixed(2)}`,
+        age: `${ageSeconds.toFixed(1)}s`,
         status: priceData.status,
       });
 
@@ -157,17 +120,6 @@ export class PythOracleIntegration {
     }
 
     return true;
-  }
-
-  /**
-   * Get status string from status code
-   */
-  private getStatusString(status: number): 'trading' | 'halted' | 'unknown' {
-    switch (status) {
-      case 1: return 'trading';
-      case 2: return 'halted';
-      default: return 'unknown';
-    }
   }
 
   /**

@@ -302,16 +302,30 @@ export class KeeperBot {
       return;
     }
 
-    logger.info('Harvest threshold met, executing harvest cycle');
+    logger.info('Harvest threshold met, executing 3-step harvest cycle');
 
-    // Execute harvest
+    // Step 1: Harvest fees from user accounts to mint
     const harvestResult = await this.feeHarvester.harvest();
     if (!harvestResult.success) {
       logger.error('Harvest failed', harvestResult);
       return;
     }
 
-    // Create swap plan based on tax flow scenarios
+    logger.info('Step 1 complete: Fees harvested to mint', {
+      totalHarvested: harvestResult.totalHarvested,
+      accountsProcessed: harvestResult.accountsProcessed
+    });
+
+    // Step 2: Withdraw fees from mint to vault PDA (NEW!)
+    const withdrawResult = await this.feeHarvester.withdrawFromMint();
+    if (!withdrawResult.success) {
+      logger.error('Withdraw from mint failed', withdrawResult);
+      return;
+    }
+
+    logger.info('Step 2 complete: Fees withdrawn from mint to vault PDA');
+
+    // Step 3: Create swap plan based on tax flow scenarios
     const keeperBalance = await this.swapManager.getKeeperBalance();
     const rewardToken = await this.tokenSelector.getCurrentRewardToken() || 
                        new PublicKey('So11111111111111111111111111111111111111112');

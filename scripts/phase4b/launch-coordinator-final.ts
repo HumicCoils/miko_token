@@ -2,7 +2,7 @@ import { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction 
 import { getAssociatedTokenAddressSync, getAccount, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { createLogger } from '../../keeper-bot/src/utils/logger';
 import { MAINNET_FORK_CONFIG } from './mainnet-fork-config';
-import { RaydiumCLMMIntegration, RAYDIUM_FEE_TIERS } from './raydium-clmm-integration';
+import { RaydiumCPMMIntegration } from './raydium-cpmm-integration';
 import { PythOracleIntegration } from './pyth-oracle-integration';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -17,14 +17,12 @@ export enum LaunchMode {
   PRODUCTION = 'production' // Full production (10 SOL)
 }
 
-// Launch stage parameters from LAUNCH_LIQUIDITY_PARAMS.md
+// Launch stage parameters from LAUNCH_LIQUIDITY_PARAMS.md (updated for CPMM)
 interface LaunchStage {
   name: string;
   offsetSeconds: number;
   mikoAmount: number;       // in tokens
   solAmount: number;        // in SOL
-  priceLowerMultiplier: number;  // Multiplier of P₀
-  priceUpperMultiplier: number;  // Multiplier of P₀
   timingTolerance: number;  // seconds
   description: string;
 }
@@ -49,7 +47,7 @@ interface OraclePrice {
 export class LaunchCoordinatorFinal {
   private connection: Connection;
   private deployerKeypair: Keypair;
-  private raydiumIntegration: RaydiumCLMMIntegration;
+  private raydiumIntegration: RaydiumCPMMIntegration;
   private pythOracle: PythOracleIntegration;
   private launchTimestamp: number | null = null;
   private poolAddress: PublicKey | null = null;
@@ -65,7 +63,7 @@ export class LaunchCoordinatorFinal {
     this.deployerKeypair = Keypair.fromSecretKey(new Uint8Array(deployerData));
     
     // Initialize Raydium integration
-    this.raydiumIntegration = new RaydiumCLMMIntegration(this.connection);
+    this.raydiumIntegration = new RaydiumCPMMIntegration(this.connection);
     
     // Initialize Pyth oracle
     this.pythOracle = new PythOracleIntegration(this.connection);
@@ -87,42 +85,34 @@ export class LaunchCoordinatorFinal {
       {
         name: 'Bootstrap',
         offsetSeconds: 0,
-        mikoAmount: totalSupply * 0.01,    // 1% = 10M MIKO
-        solAmount: 0.2 * solMultiplier,     // 0.2 SOL (test) / 0.02 SOL (canary)
-        priceLowerMultiplier: 0.7,          // P₀ × 0.7
-        priceUpperMultiplier: 1.3,          // P₀ × 1.3
+        mikoAmount: totalSupply * 0.045,   // 4.5% = 45M MIKO
+        solAmount: 0.5 * solMultiplier,     // 0.5 SOL (test) / 0.05 SOL (canary)
         timingTolerance: 0,                 // No tolerance for bootstrap
-        description: 'Pool creation minimum liquidity / price discovery'
+        description: 'Pool creation with balanced initial liquidity'
       },
       {
         name: 'Stage A',
         offsetSeconds: 60,
-        mikoAmount: totalSupply * 0.04,    // 4% = 40M MIKO
-        solAmount: 0.8 * solMultiplier,     // 0.8 SOL (test) / 0.08 SOL (canary)
-        priceLowerMultiplier: 0.5,          // P₀ × 0.5
-        priceUpperMultiplier: 1.5,          // P₀ × 1.5
+        mikoAmount: totalSupply * 0.225,   // 22.5% = 225M MIKO
+        solAmount: 2.5 * solMultiplier,     // 2.5 SOL (test) / 0.25 SOL (canary)
         timingTolerance: 5,                 // ±5s
-        description: 'Form initial trading band'
+        description: 'Major liquidity injection'
       },
       {
         name: 'Stage B',
         offsetSeconds: 180,
-        mikoAmount: totalSupply * 0.15,    // 15% = 150M MIKO
+        mikoAmount: totalSupply * 0.27,    // 27% = 270M MIKO
         solAmount: 3.0 * solMultiplier,     // 3.0 SOL (test) / 0.3 SOL (canary)
-        priceLowerMultiplier: 0.3,          // P₀ × 0.3
-        priceUpperMultiplier: 2.0,          // P₀ × 2.0
         timingTolerance: 5,                 // ±5s
-        description: 'Absorb volatility'
+        description: 'Further depth building'
       },
       {
         name: 'Stage C',
         offsetSeconds: 300,
-        mikoAmount: totalSupply * 0.70,    // 70% = 700M MIKO
-        solAmount: 6.0 * solMultiplier,     // 6.0 SOL (test) / 0.6 SOL (canary)
-        priceLowerMultiplier: 0.005,        // P₀ × 0.005 (near zero)
-        priceUpperMultiplier: 160,          // P₀ × 160 (near infinite)
+        mikoAmount: totalSupply * 0.36,    // 36% = 360M MIKO
+        solAmount: 4.0 * solMultiplier,     // 4.0 SOL (test) / 0.4 SOL (canary)
         timingTolerance: 5,                 // ±5s
-        description: 'Stability backstop before fee transition'
+        description: 'Final liquidity backstop before fee reduction'
       }
     ];
 
@@ -303,7 +293,7 @@ export class LaunchCoordinatorFinal {
       
       // 3. Verify programs
       const programChecks = [
-        { name: 'Raydium CLMM', address: MAINNET_FORK_CONFIG.programs.raydiumCLMM },
+        { name: 'Raydium CPMM', address: 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C' },
         { name: 'Absolute Vault', address: MAINNET_FORK_CONFIG.mikoPrograms.absoluteVault },
         { name: 'Smart Dial', address: MAINNET_FORK_CONFIG.mikoPrograms.smartDial }
       ];
@@ -330,31 +320,30 @@ export class LaunchCoordinatorFinal {
   }
 
   /**
-   * Create Raydium CLMM pool (Bootstrap stage)
+   * Create Raydium CPMM pool (Bootstrap stage)
    */
-  async createCLMMPool(params: LaunchParams): Promise<PublicKey> {
-    logger.info('\n=== Creating Raydium CLMM Pool (Bootstrap) ===');
+  async createCPMMPool(params: LaunchParams): Promise<PublicKey> {
+    logger.info('\n=== Creating Raydium CPMM Pool (Bootstrap) ===');
     
     if (!this.initialPrice) {
       throw new Error('Initial price not calculated');
     }
     
     const bootstrap = params.stages[0];
-    const priceLower = this.initialPrice * bootstrap.priceLowerMultiplier;
-    const priceUpper = this.initialPrice * bootstrap.priceUpperMultiplier;
     
     try {
       // Initialize Raydium SDK
       await this.raydiumIntegration.initialize(this.deployerKeypair);
       
-      // Create CLMM pool with real Raydium integration
-      const { poolId, txId } = await this.raydiumIntegration.createCLMMPool({
+      // Create CPMM pool with real Raydium integration
+      const { poolId, txId } = await this.raydiumIntegration.createCPMMPool({
         connection: this.connection,
         payer: this.deployerKeypair,
         mintA: new PublicKey(MAINNET_FORK_CONFIG.tokens.miko), // MIKO (Token-2022)
         mintB: new PublicKey(MAINNET_FORK_CONFIG.tokens.wsol), // WSOL
-        initialPrice: this.initialPrice,
-        feeTier: params.feeTier, // 25 basis points (0.25%)
+        mintAAmount: new BN(bootstrap.mikoAmount),
+        mintBAmount: new BN(bootstrap.solAmount * 1e9), // Convert SOL to lamports
+        startTime: Math.floor(Date.now() / 1000), // Current timestamp
       });
       
       this.poolAddress = poolId;
@@ -368,36 +357,21 @@ export class LaunchCoordinatorFinal {
       // Call Vault's set_launch_time with the pool creation timestamp
       await this.setVaultLaunchTime(this.launchTimestamp);
       
-      // Add bootstrap liquidity
-      logger.info('\nAdding bootstrap liquidity...');
-      const { positionId, txId: liquidityTxId } = await this.raydiumIntegration.addLiquidity({
-        poolId,
-        owner: this.deployerKeypair,
-        amountA: new BN(bootstrap.mikoAmount),
-        amountB: new BN(bootstrap.solAmount * 1e9), // Convert SOL to lamports
-        priceLower,
-        priceUpper,
-        slippage: 0.01, // 1% slippage
-      });
-      
-      logger.info(`Bootstrap liquidity added: ${bootstrap.mikoAmount / 1e6}M MIKO + ${bootstrap.solAmount} SOL`);
-      logger.info(`Position NFT: ${positionId.toBase58()}`);
-      logger.info(`Liquidity transaction: ${liquidityTxId}`);
-      logger.info(`Price range: [${priceLower.toFixed(8)}, ${priceUpper.toFixed(8)}] SOL/MIKO`);
-      logger.info(`Price band: -${((1 - bootstrap.priceLowerMultiplier) * 100).toFixed(0)}% to +${((bootstrap.priceUpperMultiplier - 1) * 100).toFixed(0)}%`);
+      // Bootstrap liquidity is added during pool creation in CPMM
+      logger.info(`\nBootstrap liquidity included in pool creation:`);
+      logger.info(`- MIKO: ${bootstrap.mikoAmount / 1e6}M`);
+      logger.info(`- SOL: ${bootstrap.solAmount}`);
+      logger.info(`- Initial price: ${this.initialPrice.toFixed(8)} SOL/MIKO`);
       
       // Log execution
       this.logStageExecution('Bootstrap', {
-        txSig: liquidityTxId,
+        txSig: txId,
         slot: await this.connection.getSlot(),
         mikoAdded: bootstrap.mikoAmount,
         solAdded: bootstrap.solAmount,
-        priceLower,
-        priceUpper,
         currentPrice: this.initialPrice,
         oraclePrice: this.oraclePrice!.price,
         poolId: poolId.toBase58(),
-        positionId: positionId.toBase58(),
       });
       
       return poolId;
@@ -429,27 +403,19 @@ export class LaunchCoordinatorFinal {
       throw new Error(`Timing violation! Outside ±${stage.timingTolerance}s window`);
     }
     
-    const priceLower = this.initialPrice * stage.priceLowerMultiplier;
-    const priceUpper = this.initialPrice * stage.priceUpperMultiplier;
-    
     logger.info(`Adding liquidity: ${stage.mikoAmount / 1e6}M MIKO + ${stage.solAmount} SOL`);
-    logger.info(`Price range: [${priceLower.toFixed(8)}, ${priceUpper.toFixed(8)}] SOL/MIKO`);
-    logger.info(`Price band: -${((1 - stage.priceLowerMultiplier) * 100).toFixed(0)}% to +${((stage.priceUpperMultiplier - 1) * 100).toFixed(0)}%`);
     
     try {
       // Add liquidity using real Raydium integration
-      const { positionId, txId } = await this.raydiumIntegration.addLiquidity({
+      const { txId } = await this.raydiumIntegration.addLiquidity({
         poolId: this.poolAddress,
         owner: this.deployerKeypair,
         amountA: new BN(stage.mikoAmount),
         amountB: new BN(stage.solAmount * 1e9), // Convert SOL to lamports
-        priceLower,
-        priceUpper,
         slippage: 0.01, // 1% slippage
       });
       
       logger.info(`✅ Liquidity added successfully!`);
-      logger.info(`Position NFT: ${positionId.toBase58()}`);
       logger.info(`Transaction: ${txId}`);
       
       // Log execution
@@ -458,11 +424,8 @@ export class LaunchCoordinatorFinal {
         slot: await this.connection.getSlot(),
         mikoAdded: stage.mikoAmount,
         solAdded: stage.solAmount,
-        priceLower,
-        priceUpper,
         elapsedTime,
         timingDiff: timeDiff,
-        positionId: positionId.toBase58(),
       });
       
       logger.info(`✅ ${stage.name} completed`);
@@ -675,7 +638,7 @@ export class LaunchCoordinatorFinal {
           offset: s.offsetSeconds,
           mikoAmount: s.mikoAmount,
           solAmount: s.solAmount,
-          priceRange: `${s.priceLowerMultiplier}x to ${s.priceUpperMultiplier}x`
+          description: s.description
         }))
       },
       marketMetrics: {
@@ -757,8 +720,8 @@ export class LaunchCoordinatorFinal {
       // 6. Display market metrics with fresh price
       this.displayMarketMetrics(params);
       
-      // 7. Create CLMM pool (T0 - Bootstrap) - THIS IS THE LAUNCH TIME
-      await this.createCLMMPool(params);
+      // 7. Create CPMM pool (T0 - Bootstrap) - THIS IS THE LAUNCH TIME
+      await this.createCPMMPool(params);
       
       // 8. Start keeper bot with V2 distribution
       await this.startKeeperBotV2();

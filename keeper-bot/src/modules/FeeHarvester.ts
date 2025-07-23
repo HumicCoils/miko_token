@@ -165,6 +165,52 @@ export class FeeHarvester {
   }
 
   /**
+   * Withdraw fees from mint to vault PDA
+   * This is the NEW STEP in the 3-step tax flow
+   */
+  async withdrawFromMint(): Promise<HarvestResult> {
+    try {
+      logger.info('Starting withdraw from mint operation');
+
+      // In mock mode, simulate withdrawal
+      if (this.config.adapters.raydium === 'MockRaydiumAdapter') {
+        logger.info('[MOCK] Simulating withdraw from mint to vault PDA');
+        
+        // Simulate transaction
+        const txid = `mock-withdraw-${Date.now()}`;
+        
+        logger.info(`[MOCK] Withdraw from mint complete - Transaction: ${txid}`);
+        
+        return {
+          success: true,
+          totalHarvested: 0, // Amount is already tracked from harvest
+          accountsProcessed: 1, // Just the mint account
+          txSignatures: [txid],
+        };
+      }
+
+      // TODO: Real implementation would:
+      // 1. Build withdraw_fees_from_mint instruction
+      // 2. Sign with keeper wallet
+      // 3. Send transaction
+      // 4. Wait for confirmation
+      // 5. Return result
+
+      throw new Error('Real withdraw from mint not implemented in mock phase');
+
+    } catch (error) {
+      logger.error('Withdraw from mint failed', { error });
+      return {
+        success: false,
+        totalHarvested: 0,
+        accountsProcessed: 0,
+        txSignatures: [],
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
    * Mock harvest implementation
    */
   private async mockHarvest(feesInfo: WithheldFeesInfo): Promise<HarvestResult> {

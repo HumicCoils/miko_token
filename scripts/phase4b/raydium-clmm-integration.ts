@@ -91,9 +91,9 @@ export class RaydiumCLMMIntegration {
         clmmConfigs = await this.raydium!.api.getClmmConfigs();
       } catch (error) {
         logger.warn('Failed to fetch CLMM configs from API, using defaults');
-        // Default config for local testing
+        // Default config for local testing - use the one loaded on fork
         clmmConfigs = [{
-          id: 'CXrumVvh9qUPxLKb1KVxJSEa8isfYEJDaYXnAWktFHdo', // Default config
+          id: '9iFER3bpjf1PTTCQCfTRu17EJgvsxo9pVyA9QWwEuX4x', // AMM config from fork
           index: 0,
           protocolFeeRate: 12000, // 1.2%
           tradeFeeRate: feeTier,
