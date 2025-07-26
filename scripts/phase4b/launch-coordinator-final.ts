@@ -1,5 +1,5 @@
 import { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
-import { getAssociatedTokenAddressSync, getAccount, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
+import { getAssociatedTokenAddressSync, getAccount, TOKEN_2022_PROGRAM_ID, NATIVE_MINT } from '@solana/spl-token';
 import { createLogger } from '../../keeper-bot/src/utils/logger';
 import { MAINNET_FORK_CONFIG } from './mainnet-fork-config';
 import { RaydiumCPMMIntegration } from './raydium-cpmm-integration';
@@ -335,14 +335,22 @@ export class LaunchCoordinatorFinal {
       // Initialize Raydium SDK
       await this.raydiumIntegration.initialize(this.deployerKeypair);
       
+      logger.info('About to create CPMM pool with parameters:');
+      logger.info(`mintA (SOL): ${NATIVE_MINT.toBase58()}`);
+      logger.info(`mintB (MIKO): ${MAINNET_FORK_CONFIG.tokens.miko}`);
+      logger.info(`mintAAmount: ${bootstrap.solAmount * 1e9} lamports`);
+      logger.info(`mintBAmount: ${bootstrap.mikoAmount * 1e9} smallest units`);
+      
       // Create CPMM pool with real Raydium integration
+      // IMPORTANT: Token ordering - lower pubkey must be mintA
+      // SOL < MIKO in pubkey comparison, so SOL is mintA
       const { poolId, txId } = await this.raydiumIntegration.createCPMMPool({
         connection: this.connection,
         payer: this.deployerKeypair,
-        mintA: new PublicKey(MAINNET_FORK_CONFIG.tokens.miko), // MIKO (Token-2022)
-        mintB: new PublicKey(MAINNET_FORK_CONFIG.tokens.wsol), // WSOL
-        mintAAmount: new BN(bootstrap.mikoAmount),
-        mintBAmount: new BN(bootstrap.solAmount * 1e9), // Convert SOL to lamports
+        mintA: NATIVE_MINT, // SOL (lower pubkey value)
+        mintB: new PublicKey(MAINNET_FORK_CONFIG.tokens.miko), // MIKO (higher pubkey value)
+        mintAAmount: new BN(bootstrap.solAmount * 1e9), // SOL in lamports
+        mintBAmount: new BN(bootstrap.mikoAmount).mul(new BN(1e9)), // MIKO in smallest units (9 decimals)
         startTime: Math.floor(Date.now() / 1000), // Current timestamp
       });
       
@@ -376,8 +384,16 @@ export class LaunchCoordinatorFinal {
       
       return poolId;
       
-    } catch (error) {
-      logger.error('Failed to create CLMM pool', { error });
+    } catch (error: any) {
+      logger.error('Failed to create CPMM pool', { 
+        error: error.message || error.toString(),
+        stack: error.stack,
+        logs: error.logs
+      });
+      if (error.logs) {
+        logger.error('Program logs:');
+        error.logs.forEach((log: string) => logger.error(log));
+      }
       throw error;
     }
   }
@@ -407,11 +423,12 @@ export class LaunchCoordinatorFinal {
     
     try {
       // Add liquidity using real Raydium integration
+      // Token ordering: A = SOL, B = MIKO
       const { txId } = await this.raydiumIntegration.addLiquidity({
         poolId: this.poolAddress,
         owner: this.deployerKeypair,
-        amountA: new BN(stage.mikoAmount),
-        amountB: new BN(stage.solAmount * 1e9), // Convert SOL to lamports
+        amountA: new BN(stage.solAmount * 1e9), // SOL in lamports
+        amountB: new BN(stage.mikoAmount).mul(new BN(1e9)), // MIKO in smallest units (9 decimals)
         slippage: 0.01, // 1% slippage
       });
       
@@ -453,14 +470,16 @@ export class LaunchCoordinatorFinal {
       // Create provider
       const wallet = new NodeWallet(this.deployerKeypair);
       const provider = new AnchorProvider(this.connection, wallet, { commitment: 'confirmed' });
+      // Set the IDL address to the deployed program
+      vaultIdl.address = MAINNET_FORK_CONFIG.mikoPrograms.absoluteVault;
       const vaultProgram = new Program(vaultIdl, provider);
       
       // Use the vault PDA from initialization
       const vaultPda = new PublicKey(initInfo.vault.pda);
       
-      // Call set_launch_time with the timestamp
+      // Call set_launch_time (takes no arguments - uses current blockchain time)
       const tx = await vaultProgram.methods
-        .setLaunchTime(new BN(timestamp))
+        .setLaunchTime()
         .accounts({
           vault: vaultPda,
           authority: this.deployerKeypair.publicKey,

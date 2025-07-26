@@ -3,18 +3,17 @@ import { Program, AnchorProvider, web3, BN } from '@coral-xyz/anchor';
 import NodeWallet from '@coral-xyz/anchor/dist/cjs/nodewallet';
 import { NATIVE_MINT } from '@solana/spl-token';
 import * as fs from 'fs';
-
-const FORK_URL = 'http://127.0.0.1:8899';
+import { ConfigManager } from './config-manager';
 
 // Import Phase 4-B IDLs
 const vaultIdl = JSON.parse(fs.readFileSync('phase4b-vault-idl.json', 'utf-8'));
 const smartDialIdl = JSON.parse(fs.readFileSync('phase4b-smart-dial-idl.json', 'utf-8'));
 
-// Load Phase 4-B config
-const config = JSON.parse(fs.readFileSync('phase4b-config.json', 'utf-8'));
-
 async function initializePrograms() {
-  const connection = new Connection(FORK_URL, 'confirmed');
+  // Use ConfigManager to get auto-derived configuration
+  const configManager = new ConfigManager('./minimal-config.json');
+  const config = await configManager.getFullConfig();
+  const connection = new Connection(config.network.rpc_url, 'confirmed');
   
   // Load deployer keypair
   const deployerData = JSON.parse(fs.readFileSync('phase4b-deployer.json', 'utf-8'));
@@ -30,19 +29,19 @@ async function initializePrograms() {
   
   console.log('Initializing Phase 4-B programs...');
   console.log('Deployer:', deployer.publicKey.toBase58());
-  console.log('MIKO Token:', config.mikoToken);
-  console.log('Vault Program:', config.programs.vault);
-  console.log('Smart Dial Program:', config.programs.smartDial);
+  console.log('MIKO Token:', config.token.mint_address);
+  console.log('Vault Program:', config.programs.vault_program_id);
+  console.log('Smart Dial Program:', config.programs.smart_dial_program_id);
   
   // Calculate PDAs
   const [vaultPda, vaultBump] = PublicKey.findProgramAddressSync(
-    [Buffer.from('vault'), new PublicKey(config.mikoToken).toBuffer()],
-    new PublicKey(config.programs.vault)
+    [Buffer.from('vault'), new PublicKey(config.token.mint_address).toBuffer()],
+    new PublicKey(config.programs.vault_program_id)
   );
   
   const [dialStatePda, dialBump] = PublicKey.findProgramAddressSync(
     [Buffer.from('smart-dial')],
-    new PublicKey(config.programs.smartDial)
+    new PublicKey(config.programs.smart_dial_program_id)
   );
   
   console.log('\nPDAs calculated:');
@@ -51,20 +50,20 @@ async function initializePrograms() {
   
   // Initialize Vault
   console.log('\nInitializing Vault...');
+  vaultIdl.address = config.programs.vault_program_id;
   const vaultProgram = new Program(vaultIdl, provider);
   
   try {
     const vaultTx = await vaultProgram.methods
       .initialize(
         deployer.publicKey,     // authority (will be updated later)
-        deployer.publicKey,     // treasury (will be updated later)
         deployer.publicKey,     // ownerWallet (will be updated later)
         deployer.publicKey,     // keeperAuthority (will be updated later)
         new BN(100_000_000_000) // minHoldAmount: 100 MIKO
       )
       .accounts({
         vault: vaultPda,
-        tokenMint: new PublicKey(config.mikoToken),
+        tokenMint: new PublicKey(config.token.mint_address),
         payer: deployer.publicKey,
         systemProgram: SystemProgram.programId,
       })
@@ -77,13 +76,13 @@ async function initializePrograms() {
   
   // Initialize Smart Dial
   console.log('\nInitializing Smart Dial...');
+  smartDialIdl.address = config.programs.smart_dial_program_id;
   const smartDialProgram = new Program(smartDialIdl, provider);
   
   try {
     const dialTx = await smartDialProgram.methods
       .initialize(
-        deployer.publicKey,                             // authority
-        deployer.publicKey                              // treasury (will be updated later)
+        deployer.publicKey                              // authority
       )
       .accounts({
         dialState: dialStatePda,
@@ -103,7 +102,6 @@ async function initializePrograms() {
       pda: vaultPda.toBase58(),
       bump: vaultBump,
       authority: deployer.publicKey.toBase58(),
-      treasury: deployer.publicKey.toBase58(),
       ownerWallet: deployer.publicKey.toBase58(),
       keeperAuthority: deployer.publicKey.toBase58(),
     },
@@ -111,7 +109,6 @@ async function initializePrograms() {
       pda: dialStatePda.toBase58(),
       bump: dialBump,
       authority: deployer.publicKey.toBase58(),
-      treasury: deployer.publicKey.toBase58(),
     },
     timestamp: new Date().toISOString(),
   };

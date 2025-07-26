@@ -12,10 +12,10 @@ import {
 } from '@solana/spl-token';
 import * as fs from 'fs';
 
-const FORK_URL = 'http://127.0.0.1:8899';
-
 async function createPhase4BToken() {
-  const connection = new Connection(FORK_URL, 'confirmed');
+  // Load minimal config
+  const minimalConfig = JSON.parse(fs.readFileSync('minimal-config.json', 'utf-8'));
+  const connection = new Connection(minimalConfig.rpc_url, 'confirmed');
   
   // Load deployer
   const deployerData = JSON.parse(fs.readFileSync('phase4b-deployer.json', 'utf-8'));
@@ -23,6 +23,8 @@ async function createPhase4BToken() {
   
   console.log('Creating MIKO token for Phase 4-B...');
   console.log('Deployer:', deployer.publicKey.toBase58());
+  console.log('Vault Program:', minimalConfig.vault_program_id);
+  console.log('Smart Dial Program:', minimalConfig.smart_dial_program_id);
   
   // Create MIKO mint
   const mintKeypair = Keypair.generate();
@@ -84,27 +86,22 @@ async function createPhase4BToken() {
   console.log('Total supply minted: 1,000,000,000 MIKO');
   console.log('Deployer ATA:', deployerAta.address.toBase58());
   
-  // Load program keypairs to get addresses
-  const vaultKeypairData = JSON.parse(fs.readFileSync('phase4b-programs/vault-phase4b.json', 'utf-8'));
-  const vaultAddress = Keypair.fromSecretKey(new Uint8Array(vaultKeypairData)).publicKey.toBase58();
+  // Update minimal config with the generated token mint
+  minimalConfig.token_mint = mintKeypair.publicKey.toBase58();
   
-  const smartDialKeypairData = JSON.parse(fs.readFileSync('phase4b-programs/smartdial-phase4b.json', 'utf-8'));
-  const smartDialAddress = Keypair.fromSecretKey(new Uint8Array(smartDialKeypairData)).publicKey.toBase58();
+  fs.writeFileSync('minimal-config.json', JSON.stringify(minimalConfig, null, 2));
+  console.log('\nToken mint saved to minimal-config.json');
   
-  // Save Phase 4-B config
-  const config = {
-    programs: {
-      vault: vaultAddress,
-      smartDial: smartDialAddress,
-    },
+  // Also save deployment info for reference
+  const deploymentInfo = {
     deployer: deployer.publicKey.toBase58(),
     mikoToken: mintKeypair.publicKey.toBase58(),
     deployerAta: deployerAta.address.toBase58(),
     createdAt: new Date().toISOString(),
   };
   
-  fs.writeFileSync('phase4b-config.json', JSON.stringify(config, null, 2));
-  console.log('\nConfiguration saved to phase4b-config.json');
+  fs.writeFileSync('phase4b-deployment-info.json', JSON.stringify(deploymentInfo, null, 2));
+  console.log('Deployment info saved to phase4b-deployment-info.json');
   
   // Also save keypairs for later use
   fs.writeFileSync('phase4b-mint-keypair.json', JSON.stringify(Array.from(mintKeypair.secretKey)));

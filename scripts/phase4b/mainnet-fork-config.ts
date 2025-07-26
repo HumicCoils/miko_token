@@ -17,7 +17,7 @@ export const MAINNET_FORK_CONFIG = {
   tokens: {
     wsol: 'So11111111111111111111111111111111111111112',
     usdc: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC mainnet
-    miko: 'H8fvrWNBAUT5asXbvRWsqKgEoZSQ5PLaWY47PLFJ5cL6', // Phase 4-B MIKO token (current deployment)
+    miko: 'EkgPtCLLsbWxhdYrCpqWej2ULoytu6QcygpnyFeiT4Gs', // Phase 4-B MIKO token (current deployment)
   },
   
   // Raydium CLMM pool configuration
@@ -49,14 +49,13 @@ export const MAINNET_FORK_CONFIG = {
   wallets: {
     deployer: 'CDTSFkBB1TuRw7WFZj4ZQpagwBhw5iURjC13kS6hEgSc',
     owner: 'D24rokM1eAxWAU9MQYuXK9QK4jnT1qJ23VP4dCqaw5uh',
-    treasury: 'D8DLFLq77rjqb5wpi3gQ2oRAPY15UToPMZzMYqAiaD1U',
     keeper: '6LTnRkPHh27xTgpfkzibe7XcUSGe3kVazvweei1D3syn',
   },
   
   // Our program addresses (deployed to fork)
   mikoPrograms: {
-    absoluteVault: '4zfeJNUcq2aTYE1qwa6DBMtyDiBGNE2a2dQ3z6YdCZqb', // Phase 4-B fork deployment (current)
-    smartDial: '3TRSjCzNVyUJWrZww4u6rKN59DYjV8Hq5JdZWNn5EAbd', // Phase 4-B fork deployment (current)
+    absoluteVault: '9qPiWoJJdas55cMZqa8d62tVHP9hbYX6NwT34qbHe9pt', // Phase 4-B fork deployment (current)
+    smartDial: 'BDYdwfdZF8RAbUokzw1YgNmeRiSGYwNsi8uF7rfsStUe', // Phase 4-B fork deployment (current)
   },
   
   // Harvest threshold

@@ -1,6 +1,13 @@
 import { Raydium, TxVersion, parseTokenAccountResp, getCpmmPdaAmmConfigId, Percent } from '@raydium-io/raydium-sdk-v2';
-import { Connection, Keypair, PublicKey } from '@solana/web3.js';
-import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction, SystemProgram } from '@solana/web3.js';
+import { 
+  TOKEN_2022_PROGRAM_ID, 
+  TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
+  createSyncNativeInstruction,
+  getAssociatedTokenAddressSync,
+  NATIVE_MINT
+} from '@solana/spl-token';
 import Decimal from 'decimal.js';
 import BN from 'bn.js';
 import { createLogger } from '../../keeper-bot/src/utils/logger';
@@ -34,6 +41,70 @@ export class RaydiumCPMMIntegration {
 
   constructor(connection: Connection) {
     this.connection = connection;
+  }
+
+  /**
+   * Ensure WSOL ATA exists and wrap SOL
+   * CPMM does not auto-create WSOL accounts like CLMM does
+   */
+  async ensureWsolAta(
+    deployer: Keypair,
+    amountLamports: BN
+  ): Promise<PublicKey> {
+    logger.info('Ensuring WSOL ATA exists...');
+    
+    const wsolAta = getAssociatedTokenAddressSync(
+      NATIVE_MINT,
+      deployer.publicKey,
+      false, // not off-curve
+      TOKEN_PROGRAM_ID
+    );
+    
+    logger.info(`WSOL ATA address: ${wsolAta.toBase58()}`);
+    
+    const ataInfo = await this.connection.getAccountInfo(wsolAta);
+    const tx = new Transaction();
+    
+    if (!ataInfo) {
+      logger.info('WSOL ATA does not exist, creating...');
+      tx.add(
+        createAssociatedTokenAccountInstruction(
+          deployer.publicKey,  // payer
+          wsolAta,            // ata
+          deployer.publicKey,  // owner
+          NATIVE_MINT,        // mint
+          TOKEN_PROGRAM_ID    // token program
+        )
+      );
+    } else {
+      logger.info('WSOL ATA already exists');
+    }
+    
+    // Transfer SOL and sync native
+    logger.info(`Wrapping ${amountLamports.toString()} lamports to WSOL...`);
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey: deployer.publicKey,
+        toPubkey: wsolAta,
+        lamports: amountLamports.toNumber(),
+      }),
+      createSyncNativeInstruction(wsolAta, TOKEN_PROGRAM_ID)
+    );
+    
+    try {
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        tx,
+        [deployer],
+        { commitment: 'confirmed' }
+      );
+      
+      logger.info(`✅ WSOL ATA ready! Transaction: ${signature}`);
+      return wsolAta;
+    } catch (error) {
+      logger.error('Failed to ensure WSOL ATA', { error });
+      throw error;
+    }
   }
 
   /**
@@ -73,10 +144,19 @@ export class RaydiumCPMMIntegration {
     }
     
     logger.info('Creating CPMM pool...');
-    logger.info(`Token A (MIKO): ${mintA.toBase58()}`);
-    logger.info(`Token B (SOL): ${mintB.toBase58()}`);
-    logger.info(`Initial MIKO: ${mintAAmount.toString()}`);
-    logger.info(`Initial SOL: ${mintBAmount.toString()}`);
+    logger.info(`Token A: ${mintA.toBase58()}`);
+    logger.info(`Token B: ${mintB.toBase58()}`);
+    logger.info(`Amount A: ${mintAAmount.toString()}`);
+    logger.info(`Amount B: ${mintBAmount.toString()}`);
+    
+    // CRITICAL: Ensure WSOL ATA exists and wrap SOL before pool creation
+    if (mintA.equals(NATIVE_MINT)) {
+      logger.info('Mint A is WSOL, ensuring ATA and wrapping SOL...');
+      await this.ensureWsolAta(payer, mintAAmount);
+    } else if (mintB.equals(NATIVE_MINT)) {
+      logger.info('Mint B is WSOL, ensuring ATA and wrapping SOL...');
+      await this.ensureWsolAta(payer, mintBAmount);
+    }
     
     try {
       // Get token info - CPMM handles Token-2022 automatically
@@ -85,8 +165,8 @@ export class RaydiumCPMMIntegration {
         this.raydium!.token.getTokenInfo(mintB.toBase58()),
       ]);
 
-      // Pool fee account for mainnet fork (same as mainnet)
-      const poolFeeAccount = new PublicKey('7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5');
+      // CPMM pool creation fee receiver account (mainnet)
+      const poolFeeAccount = new PublicKey('DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8');
       
       // Get CPMM fee configs or use default for local fork
       let feeConfig;
@@ -124,14 +204,10 @@ export class RaydiumCPMMIntegration {
         mintBAmount: mintBAmount,
         startTime: startTime ? new BN(startTime) : new BN(0),
         feeConfig: feeConfig,
-        associatedOnly: false,
+        associatedOnly: true, // Use associated token accounts only
         ownerInfo: {
-          useSOLBalance: true, // Use SOL balance for WSOL operations
+          useSOLBalance: true, // Use SOL balance for fees
         },
-        // Ensure SOL handling is correct
-        mintAUseSOLBalance: false, // MIKO is not SOL
-        mintBUseSOLBalance: true,  // SOL should use SOL balance directly
-        checkCreateATAOwner: true, // Create ATAs if needed
         txVersion: TxVersion.V0,
         computeBudgetConfig: {
           units: 600000,
@@ -163,8 +239,17 @@ export class RaydiumCPMMIntegration {
         txId,
       };
 
-    } catch (error) {
-      logger.error('Failed to create CPMM pool', { error });
+    } catch (error: any) {
+      logger.error('Failed to create CPMM pool', { 
+        error: error.message || error,
+        stack: error.stack,
+        logs: error.logs,
+        code: error.code
+      });
+      if (error.logs) {
+        logger.error('Program logs:');
+        error.logs.forEach((log: string) => logger.error(log));
+      }
       throw error;
     }
   }

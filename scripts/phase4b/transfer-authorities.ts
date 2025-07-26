@@ -6,19 +6,21 @@ import {
 } from '@solana/spl-token';
 import { readFileSync, writeFileSync } from 'fs';
 import * as path from 'path';
+import { ConfigManager } from './config-manager';
 
 async function transferAuthorities() {
-  const connection = new Connection('http://127.0.0.1:8899', 'confirmed');
+  // Use ConfigManager to get auto-derived configuration
+  const configManager = new ConfigManager('./minimal-config.json');
+  const config = await configManager.getFullConfig();
+  const connection = new Connection(config.network.rpc_url, 'confirmed');
   
   // Load deployer keypair
   const deployerKeypair = Keypair.fromSecretKey(
-    new Uint8Array(JSON.parse(readFileSync(path.join(__dirname, 'phase4b-deployer.json'), 'utf-8')))
+    new Uint8Array(JSON.parse(readFileSync('./phase4b-deployer.json', 'utf-8')))
   );
   
-  // Load config
-  const config = JSON.parse(readFileSync(path.join(__dirname, 'phase4b-config.json'), 'utf-8'));
-  const tokenMint = new PublicKey(config.mikoToken);
-  const vaultProgram = new PublicKey(config.programs.vault);
+  const tokenMint = new PublicKey(config.token.mint_address);
+  const vaultProgram = new PublicKey(config.programs.vault_program_id);
   
   // Calculate Vault PDA
   const [vaultPda, vaultBump] = PublicKey.findProgramAddressSync(
@@ -86,7 +88,7 @@ async function transferAuthorities() {
     };
     
     writeFileSync(
-      path.join(__dirname, 'authority-transfer-info.json'),
+      './authority-transfer-info.json',
       JSON.stringify(transferInfo, null, 2)
     );
     

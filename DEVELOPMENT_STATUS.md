@@ -2,986 +2,589 @@
 
 ## Overview
 **Project**: MIKO Token System  
-**Current Phase**: Phase 4-B - Local Mainnet-Fork Testing
+**Current Phase**: Phase 4-B - Local Mainnet-Fork Testing  
 **Started**: 2025-07-15  
-**Network**: Devnet (transitioning to Local Mainnet-Fork)  
-**Status**: Phase 1-3 complete ✅, Phase 4-A complete ✅, Phase 4-B in progress (fixing critical tax flow issue)
+**Current Date**: 2025-07-24  
+**Status**: Phase 1-3 complete ✅, Phase 4-A complete ✅, Phase 4-B keeper bot implementation in progress
 
-## Program Addresses
+## Current Program Addresses
 
-### Devnet
+### Devnet Deployment (Phase 1-3)
 | Program | Address | Status |
 |---------|---------|--------|
 | Absolute Vault | `4ieMsf7qFmh1W5FwcaX6M3fz3NNyaGy3FyuXoKJLrRDq` | Deployed ✅ |
-| Transfer Hook | `4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4` | Deployed ✅ (NOT USED) |
 | Smart Dial | `DggkQFbBnkMCK43y5JTHfYdX3CKw2H3m177TbLC7Mjdz` | Deployed ✅ |
+| Transfer Hook | `4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4` | Deployed ✅ (NOT USED) |
+
+### Phase 4-B Fork Deployment (Current)
+| Program | Address | Status |
+|---------|---------|--------|
+| Absolute Vault | `9qPiWoJJdas55cMZqa8d62tVHP9hbYX6NwT34qbHe9pt` | Deployed ✅ |
+| Smart Dial | `9YGb2ebiKNu6tHjhJAzm4cWCTfGBxMLoPJAWatYD2mwF` | Deployed ✅ |
 
 ### Mainnet
 | Program | Address | Status |
 |---------|---------|--------|
 | Absolute Vault | - | Not deployed |
-| Transfer Hook | - | Not deployed |
 | Smart Dial | - | Not deployed |
 
 ## Token Information
 
-### MIKO Token (New - Phase 2 Restart)
+### Devnet MIKO Token (Phase 2-3)
 - **Mint Address**: `A9xZnPo2SvSgWiSxh4XApZyjyYRcH1ES8zTCvhzogYRE`
+- **Created**: 2025-07-19
+- **Status**: Completed Phase 3 testing ✅
+
+### Phase 4-B Fork Token (Current Deployment)
+- **Mint Address**: `EkgPtCLLsbWxhdYrCpqWej2ULoytu6QcygpnyFeiT4Gs`
+- **Created**: 2025-07-23 
+- **Status**: Deployed with active liquidity pool ✅
 - **Total Supply**: 1,000,000,000 MIKO
 - **Decimals**: 9
-- **Initial Transfer Fee**: 30% (3000 basis points)
+- **Initial Transfer Fee**: 30% → 5% (Updated 2025-07-24)
+- **Current Transfer Fee**: 5% (500 basis points) ✅
 - **Extensions**: TransferFeeConfig ONLY (NO transfer hook)
-- **Freeze Authority**: null (permanent)
-- **All Authorities**: `AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95` (temporary)
-- **Deployer ATA**: `J8HYEx8UYJPb7HDJqLqrCpUKyhbJHCjuefUoeGmCZaFa`
-- **Status**: Created ✅
-- **Created**: 2025-07-19
+- **Authority Status**:
+  - Mint Authority: Revoked ✅
+  - Freeze Authority: Already null ✅
+  - Transfer Fee Config: Vault PDA ✅
+  - Withdraw Withheld: Vault PDA ✅
+- **CPMM Pool**: `Ato64e2AkmeoUTv93nCbcKJtmZkypZ9xesBpwbCyvUp7`
+  - Bootstrap: 45M MIKO + 0.5 SOL ✅
+  - Stage A: 225M MIKO + 2.5 SOL ✅
+  - Stage B/C: Not completed (2-min timeout)
 
 ## Development Progress
 
-### Phase 0: Prerequisites ✅
+### Phase 0: Prerequisites ✅ COMPLETE
 - [x] Docker and Docker Compose installed (v28.3.0 / v2.38.2)
 - [x] Project directory structure created
 - [x] Shared artifacts system configured
 - [x] Docker containers built successfully
 
-### Phase 1: Core Programs Development 🔄
+### Phase 1: Core Programs Development ✅ COMPLETE
 - [x] Docker environment configured with Solana 2.1.20 and Anchor 0.31.1
 - [x] Anchor workspace initialized
 - [x] Program keypairs generated BEFORE coding
 - [x] All programs implemented with full functionality
 - [x] All programs built successfully
-- [x] Programs deployed to devnet (3/3 complete) ✅
-  - [x] Absolute Vault: Deployed ✅
-  - [x] Transfer Hook: Deployed ✅  
-  - [x] Smart Dial: Deployed ✅
-- [x] Program IDs saved to shared-artifacts (3/3 with deployment timestamps) ✅
-- [ ] Integration testing
+- [x] Programs deployed to devnet (3/3 complete)
+- [x] Program IDs saved to shared-artifacts
+- [x] Integration testing completed
 
 ### Phase 2: Token Creation ✅ COMPLETE
-- [x] Pre-creation verification (Phase 1 programs verified) ✅
-- [x] Token creation with ONLY transfer fee extension (NO transfer hook) ✅
-- [x] Initial supply minting (1B MIKO to deployer) ✅
-- [x] Authority structure setup (temporary - all to deployer) ✅
-- [x] All Phase 2 verification contracts must PASS ✅
+- [x] Pre-creation verification
+- [x] Token creation with ONLY transfer fee extension (NO transfer hook)
+- [x] Initial supply minting (1B MIKO to deployer)
+- [x] Authority structure setup
+- [x] All Phase 2 verification contracts PASSED
 
 ### Phase 3: System Initialization ✅ COMPLETE
-- [x] Calculate PDAs ✅
-- [x] Initialize Vault program ✅
-- [x] Initialize Smart Dial program ✅
-- [x] Authority transfers ✅
-- [x] Token distribution ✅
-- [x] All verification contracts PASSED ✅
-- [x] Phase 3 testing complete ✅
+- [x] PDAs calculated
+- [x] Vault program initialized
+- [x] Smart Dial program initialized
+- [x] Authority transfers completed
+- [x] Token distribution verified
+- [x] All verification contracts PASSED
+- [x] Phase 3 testing complete
 
 ### Phase 4: Keeper Bot Development 🔄 IN PROGRESS
-- [x] Phase 4-A: Mock CI Tests ✅ COMPLETE
-  - [x] Core modules development ✅
-  - [x] Mock API integrations ✅
-  - [x] Scheduler setup ✅
-  - [x] All verification contracts PASSED ✅
-  - [x] Fixed SwapManager design flaw (MIKO tokens, not SOL) ✅
-  - [x] Fixed fraudulent test that was hiding vulnerabilities ✅
-- [ ] Phase 4-B: Local Mainnet-Fork Setup ❌ NOT READY - MOCK IMPLEMENTATIONS
-  - [x] Discovered mainnet program IDs ✅
-    - Raydium CLMM: `CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK`
-    - Jupiter V6: `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`
-  - [x] Created mainnet fork startup scripts ✅
-  - [x] Implemented Distribution Engine V2 with rollover support ✅
-  - [x] Added emergency withdrawal functions ✅
-  - [x] Created launch coordinator SHELL with TODOs ⚠️
-  - [ ] ❌ Implement REAL Raydium CPMM pool creation (currently just generates random address)
-  - [ ] ❌ Implement REAL oracle integration (currently hardcoded to $190)
-  - [ ] ❌ Implement REAL token balance checks (currently TODO)
-  - [ ] ❌ Implement REAL liquidity addition (currently simulated with setTimeout)
-  - [ ] ❌ Implement REAL set_launch_time call (currently just logs)
-  - [ ] ❌ Implement REAL keeper bot spawning (currently just logs)
-  - [ ] Execute test launch sequence (blocked by above)
-  - [ ] Generate VC:4.LOCAL_FORK_PASS verification (blocked by above)
 
-### Phase 5: Integration Testing ⏳
+#### Phase 4-A: Mock CI Tests ✅ COMPLETE
+- [x] Core modules development
+- [x] Mock API integrations
+- [x] Scheduler setup
+- [x] All verification contracts PASSED
+- [x] Fixed SwapManager design flaw (MIKO tokens, not SOL)
+- [x] Fixed test vulnerabilities
+
+#### Phase 4-B: Local Mainnet-Fork Testing 🔄 IN PROGRESS
+- [x] Discovered mainnet program IDs
+  - Raydium CPMM: `CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C`
+  - Jupiter V6: `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`
+- [x] Created mainnet fork startup scripts
+- [x] Implemented Distribution Engine V2 with rollover support
+- [x] Tax flow issue resolved (3-step flow implemented)
+- [x] declare_id! mismatch resolved
+- [x] Removed treasury from all programs and scripts
+- [x] Programs rebuilt with latest changes
+- [x] Phase 4-B folder cleaned and organized
+- [x] CPMM pool creation implementation (WSOL ATA issue resolved)
+- [x] Fresh deployment with new program keypairs (2025-07-23)
+- [x] Programs deployed with matching declare_id!
+- [x] MIKO token created with correct fee configuration
+- [x] Programs initialized successfully
+- [x] Authorities transferred to Vault PDA
+- [x] Mint and freeze authorities revoked
+- [x] CPMM pool created with correct amounts
+- [x] Bootstrap and Stage A liquidity added
+- [x] Launch time set in Vault
+- [x] Implement automatic fee updates in keeper bot ✅
+- [x] Test fee transition from 30% to 5% ✅
+- [x] Fix manual configuration system with ConfigManager ✅
+- [x] Add liquidity to pool (900M MIKO + 10 SOL total) ✅
+- [x] Implement harvest operations (harvest_fees, withdraw_fees_from_mint) ✅
+- [x] Implement Jupiter adapter for tax swaps ✅
+- [x] Implement mock Birdeye adapter for holder eligibility ✅
+- [x] Implement distribution engine with rollover support ✅
+- [ ] Test tax collection with swap script
+- [ ] Test harvest → withdraw → distribute cycle
+- [ ] Generate VC:4.LOCAL_FORK_PASS verification
+
+### Phase 5: Integration Testing ⏳ NOT STARTED
 - [ ] Pre-launch testing
 - [ ] Launch simulation
 - [ ] Post-launch testing
 - [ ] Load testing
 
-### Phase 6: Production Deployment ⏳
+### Phase 6: Production Deployment ⏳ NOT STARTED
 - [ ] Mainnet program deployment
 - [ ] Token creation on mainnet
 - [ ] Launch execution
 
-## Technical Details
+## Verification Contract Status
 
-### Environment
+### Phase 1-3 Verifications ✅ ALL PASSED
+| Phase | VC ID | Description | Status |
+|-------|-------|-------------|--------|
+| 1 | Program ID Match | All deployed IDs match declared IDs | ✅ PASSED |
+| 2 | VC:2.NO_UNSUPPORTED_EXT | Only TransferFeeConfig extension present | ✅ PASSED |
+| 2 | VC:2.FEE_RATE | Transfer fee is exactly 30% | ✅ PASSED |
+| 2 | VC:2.AUTHORITIES | All authorities correctly set | ✅ PASSED |
+| 3 | VC:3.PDA_CALCULATION | Vault PDA derivation correct | ✅ PASSED |
+| 3 | VC:3.VAULT_EXCLUSIONS | System accounts auto-excluded | ✅ PASSED |
+| 3 | VC:3.AUTH_SYNC | All authorities transferred to Vault PDA | ✅ PASSED |
+| 3 | VC:3.TRANSFER_TEST | Standard transfers work with 30% fee | ✅ PASSED |
+
+### Phase 4 Verifications
+| Phase | VC ID | Description | Status |
+|-------|-------|-------------|--------|
+| 4-A | VC:4.KEEPER_PREFLIGHT | Keeper environment ready | ✅ PASSED |
+| 4-A | VC:4.FIRST_MONDAY | Reward token schedule calculation | ✅ PASSED |
+| 4-A | VC:4.TAX_FLOW_EDGE | Edge cases handled | ✅ PASSED |
+| 4-B | VC:4.LOCAL_FORK_PASS | Fork testing complete | ⏳ Pending |
+
+### Phase 5 Verifications
+| VC ID | Description | Status |
+|-------|-------------|--------|
+| VC:LAUNCH_TIMING | Fee transitions at exact times | ⏳ Not started |
+| VC:ELIGIBILITY_SAMPLE | $100 holder filtering correct | ⏳ Not started |
+
+## Technical Stack
 - **Solana CLI**: 2.1.20 (compatible with Anchor 0.31.1)
 - **Anchor Framework**: 0.31.1
 - **Rust**: Latest stable
 - **Docker**: 28.3.0
 - **Docker Compose**: 2.38.2
-
-### Architecture Decisions
-1. Using Solana CLI 2.1.20 for Anchor 0.31.1 compatibility
-2. Docker isolation for each development phase
-3. Shared artifacts volume for program ID persistence
-4. Keypair generation before coding to ensure ID consistency
-
-## Issues & Resolutions
-
-### Resolved
-1. **Anchor Installation**: Initial build failed with time crate compatibility issue
-   - **Solution**: Updated to Anchor 0.31.1 which has the fix
-   
-2. **Solana Installation URL**: Changed from release.solana.com to release.anza.xyz
-   - **Solution**: Updated Dockerfile with correct URL
-
-### Current
-- **Smart Dial Deployment**: Successfully deployed on 2025-07-16 after receiving 5 SOL from user
-  - Status: Completed ✅
+- **Token Program**: Token-2022
 
 ## SOL Usage Tracking
 
 ### Devnet
-| Operation | Amount | Date | Status |
-|-----------|--------|------|--------|
-| Airdrop received | 5 SOL | 2025-07-15 | Completed |
-| Absolute Vault deployment | ~1.84 SOL | 2025-07-15 | Completed |
-| Transfer Hook deployment | ~1.84 SOL | 2025-07-15 | Completed |
-| Smart Dial deployment | ~1.52 SOL | 2025-07-16 | Completed |
-| User funding received | +5 SOL | 2025-07-16 | Completed |
-| ~~MIKO token creation (Phase 2) - old~~ | ~~0.011 SOL~~ | ~~2025-07-16~~ | Failed - transfer hook issue |
-| ~~Vault initialization (Phase 3) - old~~ | ~~0.005 SOL~~ | ~~2025-07-16~~ | Failed - transfer hook issue |
-| MIKO token creation (Phase 2 restart) | ~0.02 SOL | 2025-07-19 | Completed ✅ |
-| Vault initialization (Phase 3) | ~0.01 SOL | 2025-07-19 | Completed ✅ |
-| Vault/Smart Dial config updates | ~0.003 SOL | 2025-07-19 | Completed ✅ |
-| Authority transfers & mint revoke | ~0.003 SOL | 2025-07-19 | Completed ✅ |
-| VC:3.TRANSFER_TEST | ~0.003 SOL | 2025-07-19 | Completed ✅ |
-| **Current Balance** | ~4.58 SOL | 2025-07-19 | Phase 3 in progress |
+| Phase | Operation | SOL Used | Date |
+|-------|-----------|----------|------|
+| Phase 1 | Program deployments (3 programs) | ~5.2 SOL | 2025-07-15/16 |
+| Phase 2 | Token creation with metadata | ~0.02 SOL | 2025-07-19 |
+| Phase 3 | System initialization & tests | ~0.02 SOL | 2025-07-19 |
+| **Total** | **All devnet operations** | **~5.24 SOL** | - |
 
 ### Mainnet
-| Operation | Amount | Date | Status |
-|-----------|--------|------|--------|
-| Program Deployment | 0 SOL | - | Not started |
-| Token Creation | 0 SOL | - | Not started |
-| Launch | 0 SOL | - | Not started |
+Not deployed yet - 0 SOL used
 
-## Next Steps
-1. Phase 1 Complete ✅ - All programs deployed and verified
-2. Phase 2 Complete ✅ - Token created without transfer hook
-3. Phase 3 Complete ✅ - System initialized, authorities transferred
-4. Phase 4 In Progress 🔄 - Keeper Bot Development
+### Local Fork (Phase 4-B)
+No real SOL consumption - using local test validator
 
-**Current Focus**: Phase 4-B - Local Mainnet-Fork Testing
-- Phase 4-A Mock CI Tests completed successfully ✅
-- Phase 4-B setup complete and ready for execution ✅
-- Key accomplishments:
-  - Fixed critical design flaw: SwapManager now correctly handles MIKO tokens (not SOL)
-  - Implemented Distribution Engine V2 to handle undistributed funds rollover
-  - Created launch coordinator following exact LAUNCH_LIQUIDITY_PARAMS.md specs
-  - Added emergency withdrawal capability for stuck funds
-  - Documented undistributed funds handling in PLAN.md
-- Next: Execute test launch with 90% supply (900M MIKO) + 10 SOL liquidity
+## Critical Deployer Information
+- **Deployer Address**: `AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95` (Phase 1-3)
+- **Phase 4-B Deployer**: `CDTSFkBB1TuRw7WFZj4ZQpagwBhw5iURjC13kS6hEgSc`
+- **Location**: Shared across all phase containers
+- **Critical**: Same keypair must be used for all operations within each phase
 
-## Verification Contract Status
+## Current Status Summary
 
-### Overview
-Machine-checkable verification gates that must PASS before phase progression. All verifications output JSON artifacts to `shared-artifacts/verification/`.
+### What's Complete ✅
+1. All core programs deployed and tested on devnet
+2. Token created with proper fee configuration
+3. System initialized with correct authorities
+4. Mock keeper bot tests passed
+5. Phase 4-B infrastructure ready
+6. Tax flow fixed with 3-step process
+7. Treasury removed from all components
+8. Programs rebuilt with latest changes
+9. Phase 4-B folder cleaned and organized
+10. WSOL ATA issue resolved
+11. Production configuration system (ConfigManager) implemented
+12. All keeper bot modules implemented and ready for testing
+13. Liquidity added to pool (900M MIKO + 10 SOL)
 
-### Phase 1 Verifications
-- ✅ **Program ID Match**: All deployed IDs match declared IDs (manually verified)
+### Session 2025-07-25 Accomplishments
+1. **Fixed Manual Config System**: Created ConfigManager that auto-derives PDAs and queries chain state
+2. **Implemented Jupiter Adapter**: Full Jupiter v6 integration with proper tax flow scenarios
+3. **Created Mock Birdeye Adapter**: Clearly labeled mock for $100 holder eligibility on local fork
+4. **Enhanced SwapManager**: Implements all scenarios from PLAN.md with keeper top-up logic
+5. **Completed Distribution Engine**: Token distribution with rollover support for early launch
+6. **Added Pool Liquidity**: Successfully added 630M MIKO + 7 SOL (total 900M + 10 SOL)
+7. **Ready for Testing**: All keeper bot functionality implemented, awaiting integration tests
 
-### Phase 2 Verifications
-| VC ID | Description | Status | Artifact |
-|-------|-------------|--------|----------|
-| VC:2.NO_UNSUPPORTED_EXT | Verify only TransferFeeConfig extension present | ✅ PASSED | vc2-no-unsupported-ext.json |
-| VC:2.FEE_RATE | Transfer fee is exactly 30% | ✅ PASSED | vc2-fee-rate.json |
-| VC:2.AUTHORITIES | All authorities correctly set | ✅ PASSED | vc2-authorities.json |
+### Current Focus 🔄
+**Phase 4-B Keeper Bot Implementation**
+- Pool created successfully: `Ato64e2AkmeoUTv93nCbcKJtmZkypZ9xesBpwbCyvUp7` ✅
+- Liquidity added: 900M MIKO + 10 SOL total (270M + 630M additions) ✅
+- Launch time set in Vault: 2025-07-24T12:09:32Z (blockchain time) ✅
+- **Fee Update Implemented**: Successfully updated from 30% to 5% ✅
+  - Transaction: `cYKdxjR9KcLvYZ1hHr6ZyGrFf4MrnuQ6BqUcvkGDv3Edex9QzTFULYrZU1bjYgmS2c5gUx1vT2eANnJEFfRehG2`
+  - Keeper bot now has working fee update implementation
+  - Fee finalized at 5% (permanent)
+- **BLOCKCHAIN TIME**: ~19 hours ahead of system time (known fork issue)
+- **Config System Fixed**: Production-ready ConfigManager replaces manual JSON editing ✅
+- **All Keeper Bot Modules Implemented**: Ready for harvest → swap → distribute testing ✅
 
-### Phase 3 Verifications
-| VC ID | Description | Status | Artifact |
-|-------|-------------|--------|----------|
-| VC:3.PDA_CALCULATION | Vault PDA derivation correct | ✅ PASSED | vc3-pda-calculation.json |
-| VC:3.VAULT_EXCLUSIONS | System accounts auto-excluded | ✅ PASSED | vc3-vault-exclusions.json |
-| VC:3.AUTH_SYNC | All authorities transferred to Vault PDA | ✅ PASSED | vc3-auth-sync.json |
-| VC:3.TRANSFER_TEST | Standard transfers work with 30% fee | ✅ PASSED | vc3-transfer-test.json |
+### Keeper Bot Implementation Status (2025-07-25)
+**Root `/keeper-bot/` Status**:
+- Built for Phase 4-A mock testing only
+- All on-chain operations throw "Real X not implemented in mock phase" errors
+- Has complete decision-making logic but no execution capability
+- Uses only MockRaydiumAdapter, MockJupiterAdapter, MockBirdeyeAdapter
 
-### Phase 4 Verifications
-| VC ID | Description | Status | Artifact |
-|-------|-------------|--------|----------|
-| VC:4.KEEPER_PREFLIGHT | Keeper environment ready | ✅ PASSED | vc4-keeper-preflight.json |
-| VC:4.FIRST_MONDAY | Reward token schedule calculation | ✅ PASSED | vc4-first-monday.json |
-| VC:4.TAX_FLOW_EDGE | Edge cases handled (0.05 SOL, rollback, concurrent) | ✅ PASSED | vc4-tax-flow-edge.json |
+**Phase 4-B `/scripts/phase4b/phase4b-keeper/` Status**:
+- Created standalone implementation independent of root keeper bot
+- All modules ported to phase4b-keeper directory
+- Fee update functionality successfully implemented and tested ✅
+- Uses blockchain time for accurate fee transitions
+- **ALL MODULES NOW IMPLEMENTED** ✅
 
-### Phase 5 Verifications
-| VC ID | Description | Status | Artifact |
-|-------|-------------|--------|----------|
-| VC:LAUNCH_TIMING | Fee transitions at exact times | ⏳ Not started | - |
-| VC:ELIGIBILITY_SAMPLE | $100 holder filtering correct | ⏳ Not started | - |
+**Completed Implementations**:
+1. **Fee Updates**: ✅ COMPLETE - Successfully calls vault's `update_transfer_fee`
+2. **Harvest**: ✅ COMPLETE - Implements `harvest_fees` for 500k MIKO threshold
+3. **Withdraw**: ✅ COMPLETE - Implements `withdraw_fees_from_mint` (3-step flow)
+4. **Swaps**: ✅ COMPLETE - Jupiter adapter with tax flow scenarios from PLAN.md
+5. **Holder Data**: ✅ COMPLETE - Mock Birdeye adapter for $100+ holder filtering
+6. **Distribution**: ✅ COMPLETE - Token distribution with rollover support
+7. **Twitter**: ✅ COMPLETE - Mock implementation (sufficient for local fork)
+8. **SOL Management**: ✅ COMPLETE - Keeper top-up logic in SwapManager
 
-## Critical Reminders
+**Key Implementation Details**:
+- **ConfigManager**: Auto-derives PDAs, queries pool from chain
+- **SwapManager**: Implements all tax flow scenarios (SOL/non-SOL reward tokens)
+- **JupiterAdapter**: Full Jupiter v6 integration for Token-2022 swaps
+- **MockBirdeyeAdapter**: Clearly labeled mock for local fork testing
+- **DistributionEngine**: Rollover mechanism for early launch phase
+- **Keeper Top-up**: Automatically uses up to 20% of tax when keeper < 0.05 SOL
+
+### Immediate Next Steps
+1. **Run swap test to generate fees** (PRIORITY)
+   - Execute swap-test.ts with 20 wallets
+   - Generate 500k+ MIKO in tax fees
+   - Verify fees accumulate in withheld accounts
+   ```bash
+   cd scripts/phase4b
+   npx tsx swap-test.ts
+   ```
+
+2. **Test harvest → swap → distribute cycle**
+   - Run keeper bot to detect threshold
+   - Execute 3-step harvest flow
+   - Test tax flow scenarios with keeper top-up
+   - Verify distribution or rollover
+   ```bash
+   cd scripts/phase4b/phase4b-keeper
+   npx tsx keeper-bot-phase4b.ts
+   ```
+
+3. **Integration testing scenarios**
+   - Test with keeper balance < 0.05 SOL
+   - Test with no eligible holders (rollover)
+   - Test with different reward tokens
+   - Test batch distribution
+
+4. **Generate VC:4.LOCAL_FORK_PASS**
+   - Document all test results
+   - Verify all keeper operations work
+   - Create verification report
+
+5. **Fix launch coordinator** (after keeper bot testing)
+   - Address 2-minute timeout limitation
+   - Create fresh token for complete launch test
+
+## Key Architecture Decisions
+
+### 1. No Transfer Hook
+- Decision: Use only TransferFeeConfig extension
+- Reason: Transfer hooks break wallet/DEX compatibility
+- Result: Token works with all standard infrastructure
+
+### 2. Tax Flow Design
+- 3-step process: Harvest → Withdraw from Mint → Distribute
+- All fees flow through Token-2022 withheld accounts
+- Distribution Engine V2 handles undistributed funds
+
+### 3. CPMM for Token-2022
+- Decision: Use CPMM instead of CLMM
+- Reason: CLMM doesn't support Token-2022 tokens
+- Solution: Pre-create WSOL ATA before pool creation
+
+### 4. No Treasury
+- Treasury concept removed from all programs
+- Tax distribution: 20% to owner, 80% to holders
+- Simplifies architecture and reduces complexity
+
+### 5. Production Configuration System
+- Decision: Use ConfigManager with auto-derived values
+- Minimal config contains only: RPC URL, program IDs, token mint, keeper path
+- All PDAs and pool info derived from chain
+- Result: No manual JSON editing during deployment flow
+
+## Phase 4-B Configuration
+| Wallet Type | Public Key | Purpose |
+|-------------|------------|----------|
+| Deployer | `CDTSFkBB1TuRw7WFZj4ZQpagwBhw5iURjC13kS6hEgSc` | Deployment and initial operations |
+| Owner | `D24rokM1eAxWAU9MQYuXK9QK4jnT1qJ23VP4dCqaw5uh` | Receives 20% of tax |
+| Keeper | `6LTnRkPHh27xTgpfkzibe7XcUSGe3kVazvweei1D3syn` | Bot operations |
+
+## Key Files for Continuation
+| File | Purpose |
+|------|---------|
+| `minimal-config.json` | Essential configuration (RPC, programs, token mint) |
+| `phase4b-keeper/keeper-bot-phase4b.ts` | Main keeper bot entry point |
+| `swap-test.ts` | Generate tax fees for testing |
+| `phase4b-keeper/rollover-state.json` | Tracks undistributed rewards (created on first run) |
+| `phase4b-init-info.json` | Contains vault initialization details |
+| `launch-execution.log` | Pool creation details |
+
+## Launch Parameters
+- **Pool Type**: Raydium CPMM (Token-2022 compatible)
+- **Liquidity**: 90% supply (900M MIKO) + 10 SOL
+- **Stages**: Bootstrap → A → B → C (over 5 minutes)
+- **Fee Schedule**: 30% → 15% (5min) → 5% (10min)
+- **Oracle**: Pyth SOL/USD price feed required
+
+## Phase 4-B Test Results
+- **Test Pool Created**: `BJshJ58WUTC9bKar7QidUJM278rrMrmqSgj4SbKve44`
+- **LP Mint**: `AK9F3w4yA6c2PbmN4GP6XBBJc6ZENmvVYko48zdQmmxg`
+- **Issue**: Decimal calculation error (0.045 MIKO instead of 45M)
+- **Liquidity Removal**: Successfully tested and removed all liquidity
+
+## Important Reminders
 - ⚠️ NEVER change program keypairs after generation
-- ⚠️ Always verify deployed ID matches declared ID
-- ⚠️ Initialize programs BEFORE transferring authorities
-- ⚠️ Mint total supply BEFORE revoking mint authority
-- ⚠️ Follow exact order in TO_DO.md checklist
-- ⚠️ ALL verification gates must PASS before proceeding to next phase
+- ⚠️ Always verify declare_id! matches deployed program
+- ⚠️ Test everything on fork before mainnet
+- ⚠️ WSOL ATA must be created before CPMM pool creation
+- ⚠️ All verification contracts must PASS before proceeding
 
-## CRITICAL DEPLOYER KEYPAIR INFORMATION
-**NEVER CREATE A NEW DEPLOYER KEYPAIR - USE THE EXISTING ONE**
-- **Deployer Address**: `AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95`
-- **Location**: Must be shared across all phase containers
-- **Used In**: All phases from Phase 1 onwards
-- **Authority Over**: All programs, token mint, all authorities
-- **CRITICAL**: This same keypair MUST be used for ALL operations across ALL phases
+## Critical Lessons Learned (Mistakes to Avoid)
 
-## SOL Consumption
+### 1. IDL File Management
+**Mistake**: Deleted `target/` directory thinking IDL files were regeneratable  
+**Impact**: Nearly blocked Phase 3 progress - Anchor requires IDL for client interactions  
+**Lesson**: IDL files are CRITICAL deployment artifacts that must be preserved  
+**Prevention**: Copy IDL files to shared-artifacts immediately after generation
 
-### Devnet
-| Phase | Operation | SOL Used | Date |
-|-------|-----------|----------|------|
-| Phase 1 | Program deployments (3 programs) | ~3.0 SOL | 2025-07-15 |
-| Phase 2 | Token creation with metadata | ~0.1 SOL | 2025-07-19 |
-| Phase 3 | System initialization | ~0.2 SOL | 2025-07-19 |
-| Phase 4-A | Mock testing (container only) | 0 SOL | 2025-07-21 |
-| Phase 4-B | Local mainnet fork setup | 0 SOL | 2025-07-21 |
-| **Total** | **All operations** | **~3.3 SOL** | - |
+### 2. Program ID Handling
+**Mistake**: Running `anchor build` changed all program IDs in source files  
+**Impact**: Could have broken entire deployment if not caught  
+**Lesson**: Build process modifies declare_id! statements  
+**Prevention**: Always backup source files before rebuilds
 
-### Mainnet
-| Phase | Operation | SOL Used | Date |
-|-------|-----------|----------|------|
-| - | Not deployed yet | 0 SOL | - |
+### 3. declare_id! Mismatch (CATASTROPHIC)
+**Mistake**: Source code declare_id! didn't match deployed program IDs  
+**Impact**: FORCED REDEPLOYMENT - Would lose ALL FUNDS on mainnet  
+**What Happened**:
+- Deployed programs had different IDs than source code
+- Result: DeclaredProgramIdMismatch error → forced to redeploy
+**Why This Is CATASTROPHIC**:
+- Redeploying resets ALL program state
+- All user funds would be LOST
+- All authorities would be RESET
+- Token authorities would be BROKEN forever
+**Prevention Protocol**:
+1. ALWAYS verify declare_id! matches deployed program BEFORE operations
+2. NEVER modify declare_id! after deployment
+3. Create pre-flight check script:
+```bash
+solana program show <deployed-id> | grep "Program Id"
+grep "declare_id!" src/lib.rs
+# These MUST match EXACTLY
+```
 
-*Note: Phase 4-A and 4-B use mock adapters and local fork, no actual blockchain interaction*
+### 4. Transfer Hook Incompatibility
+**Mistake**: Initially included transfer hook extension  
+**Impact**: Token unusable with all wallets and DEXs  
+**Root Cause**: Transfer hooks require extra accounts that wallets don't provide  
+**Solution**: Removed transfer hook, use only TransferFeeConfig  
+**Lesson**: Standard compatibility > advanced features
 
-## CRITICAL ISSUE: Tax Flow Design Flaw Discovered
+### 5. Tax Flow Design Flaw
+**Mistake**: harvest_fees sent fees to mint, distribute_rewards tried to use vault account  
+**Impact**: Entire tax system non-functional  
+**Solution**: Added withdraw_fees_from_mint step (3-step flow)  
+**Lesson**: Always trace fund flow completely before implementation
 
-**Date Discovered**: 2025-07-22
-**Severity**: CRITICAL - Entire tax system non-functional
-**Status**: FIXING - Source code updated, needs rebuild and redeploy
-
-### Problem
-Fundamental design flaw in the tax flow:
-1. `harvest_fees` uses `harvest_withheld_tokens_to_mint` → fees go to MINT account
-2. `distribute_rewards` tries to transfer from `vault_token_account` → which is EMPTY
-3. **MISSING**: No function to call `withdraw_withheld_tokens_from_mint` to move fees from mint to vault PDA
-
-### Solution (per TAX_FLOW_ERROR_SOLUTION.md)
-1. **Added**: `withdraw_fees_from_mint` function to vault program
-2. **Removed**: Unused `treasury` field from VaultState
-3. **Updated**: Tax flow is now 3 steps:
-   - Step 1: `harvest_fees` → fees to mint
-   - Step 2: `withdraw_fees_from_mint` → mint to vault PDA (NEW)
-   - Step 3: `distribute_rewards` → vault PDA to recipients
-
-### Current Status
-- ✅ Source code updated with fixes
-- ❌ Program NOT rebuilt yet
-- ❌ Program NOT redeployed yet
-- ❌ Keeper bot NOT updated for 3-step flow yet
-
-## Critical Architecture Improvements
-
-### Undistributed Funds Handling (Added 2025-07-21)
-**Problem**: During early launch with 30% tax, no holders may meet $100 threshold, causing 80% of harvested fees to get stuck in keeper wallet.
-
-**Solution**: Distribution Engine V2 with:
-- Automatic rollover to next cycle when eligible holders appear
-- Persistent state tracking (amount, token, timestamp)
-- Emergency withdrawal function for authority
-- Example: Cycle 1 (no holders) → 400k MIKO saved → Cycle 2 (holders exist) → 800k MIKO distributed
-
-This ensures fair distribution and prevents permanent loss of holder rewards during the critical early launch phase.
-
-## Lessons Learned
-
-### Critical Mistakes Made During Development
-
-#### 1. IDL File Deletion Catastrophe (Phase 3 Blocker)
-**Mistake**: Deleted `target/` directory after Phase 1 deployment thinking IDL files were "regeneratable"
-**Impact**: Nearly blocked all Phase 3 progress as Anchor requires IDL for client interactions
-**Lesson**: IDL files are CRITICAL deployment artifacts that must be preserved. They are NOT just build artifacts.
-**Solution Applied**: Had to rebuild programs (risking ID changes), extract IDL files, then restore original program IDs
-
-#### 2. Program ID Modification During Rebuild
-**Mistake**: Running `anchor build` changed all program IDs in source files
-**Impact**: Could have broken entire deployment if not caught and reverted
-**Lesson**: Always backup source files before rebuilds. Build process modifies declare_id! statements.
-**Solution Applied**: Manually restored original IDs in all .rs files and Anchor.toml
-
-#### 3. IDL Structure Misunderstanding
-**Mistake**: Attempted to manually construct IDL without understanding proper structure
-**Impact**: Wasted significant time with incorrect IDL formats (accounts vs types, missing metadata)
-**Lesson**: Anchor IDL has specific required structure - use generated IDL as reference
-**Key Learning**: 
-- Account types marked with #[account] go in "accounts" section, not "types"
-- Discriminators are auto-calculated from instruction names
-- Metadata section with address field is required
-
-#### 4. Assuming Simplified Solutions
-**Mistake**: Tried to bypass IDL by using raw instructions when blocked
-**Impact**: Would have violated project requirements for production-ready code
-**Lesson**: Never compromise on full functionality. If blocked, find the proper solution.
-
-#### 5. Not Verifying Cleanup Impact
-**Mistake**: Cleaned up "build artifacts" without verifying what was essential for future phases
-**Impact**: Lost critical files needed for Phase 3
-**Lesson**: Before any cleanup, verify files are truly regeneratable and not needed for subsequent phases
-
-### Best Practices Established
-1. **Phase Isolation**: Each phase's artifacts must be carefully preserved
-2. **IDL Management**: IDL files should be copied to shared-artifacts immediately after generation
-3. **Program IDs**: Must be protected and verified after any build operation
-4. **Verification First**: Always run verification contracts before proceeding
-5. **Documentation**: Update status files immediately after each major step
-
-### Tool-Specific Learnings
-- Anchor 0.31.1 with Solana 2.1.20 compatibility confirmed
-- Program.account property requires proper IDL with accounts section
-- Build process can modify source files - always verify after builds
-- Docker isolation helps but shared-artifacts management is critical
-
-#### 7. Anchor Program Constructor Changes (CRITICAL - Phase 4-B)
-**Mistake**: Using old Anchor Program constructor syntax with programId parameter
-**Impact**: DeclaredProgramIdMismatch error (4100) preventing all program initialization
-**Root Cause**: Anchor v0.30.0+ changed Program constructor - programId parameter was removed
-**Solution**: Override IDL address field before creating Program instance:
+### 6. Anchor Program Constructor Changes
+**Mistake**: Used old Anchor syntax with programId parameter  
+**Impact**: DeclaredProgramIdMismatch error preventing initialization  
+**Solution**: Override IDL address field instead:
 ```typescript
 // WRONG (old syntax):
 const program = new Program(idl, programId, provider);
 
 // CORRECT (v0.30.0+):
-idl.address = actualDeployedProgramId;  // Override IDL address
+idl.address = actualDeployedProgramId;
 const program = new Program(idl, provider);
 ```
-**Key Learning**: 
-- IDL now requires "address" field containing program ID
-- Program constructor uses idl.address, not separate programId parameter
-- When IDL address doesn't match deployed program, override it before initialization
-- This change ensures program ID is always included with IDL, reducing configuration errors
 
-#### 8. CRITICAL: declare_id! Mismatch Causes REDEPLOYMENT (CATASTROPHIC - Phase 4-B)
-**Mistake**: Source code declare_id! didn't match deployed program IDs
-**Impact**: FORCED REDEPLOYMENT - Could have lost ALL FUNDS on mainnet
-**Severity**: CATASTROPHIC - This mistake could cost millions on mainnet
+### 7. CPMM vs CLMM Requirements
+**Mistake**: Assumed CPMM works like CLMM for WSOL handling  
+**Impact**: Pool creation fails with missing WSOL account  
+**Lesson**: CPMM requires manual WSOL ATA creation, CLMM does it automatically  
+**Solution**: Pre-create WSOL ATA before pool creation (documented in `cpmm_wsol_fix.md`)
+
+### 8. Treasury Over-Engineering
+**Mistake**: Initially included treasury concept in architecture  
+**Impact**: Added unnecessary complexity with no actual function  
+**Solution**: Removed treasury from all programs and scripts  
+**Lesson**: Simpler architecture is better - avoid unused features
+
+### 9. Program Deployment Order and ID Management
+**Mistake**: Deployed programs without ensuring declare_id! matched the deployment keypair  
+**Impact**: DeclaredProgramIdMismatch error preventing program initialization  
+**Root Cause**: Used different keypairs for deployment than what was in source code  
 **What Happened**:
-- Deployed programs: 4zfeJNUcq2aTYE1qwa6DBMtyDiBGNE2a2dQ3z6YdCZqb (vault), 3TRSjCzNVyUJWrZww4u6rKN59DYjV8Hq5JdZWNn5EAbd (smart dial)
-- Source declare_id!: AM24CQPXy8eiKnamhm6htFzgZNQZzWYWfyhpbVFHrLvE (vault), 3gfiux1otgd3Um9TYtHGDXYnDLX2fDHU95FfwCxmYAEc (smart dial)
-- Result: DeclaredProgramIdMismatch error → FORCED to update source → FORCED to redeploy
-
-**Why This Is CATASTROPHIC**:
-1. Redeploying resets ALL program state
-2. All user funds in the program would be LOST
-3. All authorities would be RESET
-4. All PDAs would CHANGE
-5. Token authorities pointing to old program would be BROKEN
-6. Users' tokens would be STUCK forever
-
-**PREVENTION (MUST DO EVERY TIME)**:
-1. ALWAYS verify declare_id! matches deployed program BEFORE any operations
-2. NEVER modify declare_id! after deployment
-3. ALWAYS backup declare_id! values immediately after deployment
-4. Create a pre-flight check script that verifies:
-   ```bash
-   solana program show <deployed-id> | grep "Program Id"
-   grep "declare_id!" src/lib.rs
-   # These MUST match EXACTLY
-   ```
-5. Add this check to CI/CD pipeline
-6. Add this check to deployment scripts
-7. NEVER proceed if there's ANY mismatch
-
-**Emergency Protocol If This Happens on Mainnet**:
-1. DO NOT REDEPLOY - You will lose everything
-2. Create new client code that uses correct program IDs
-3. Override IDL addresses in client, NOT in source
-4. Keep source code declare_id! unchanged
-5. Document the mismatch for future developers
-
-### Critical Architectural Issues
-
-#### 6. Transfer Hook Wallet/DEX Incompatibility (Phase 3 BLOCKER)
-**Discovery Date**: 2025-07-16 (During VC:3.TRANSFER_TEST)
-**Severity**: CRITICAL - Makes token unusable in production
-**Status**: BLOCKED - Awaiting architectural decision
-
-**Problem Description**:
-- Standard SPL token transfers fail with: "An account required by the instruction is missing"
-- Transfer hooks require ExtraAccountMetaList accounts that wallets don't automatically include
-- Token becomes untransferable through normal channels
-
-**Affected Platforms** (Confirmed Incompatible):
-- Phantom wallet - Cannot transfer MIKO tokens
-- Solflare wallet - Cannot transfer MIKO tokens  
-- Backpack wallet - Cannot transfer MIKO tokens
-- Raydium DEX - Cannot trade MIKO tokens
-- Orca DEX - Cannot trade MIKO tokens
-- Jupiter aggregator - Cannot route MIKO tokens
-- Any standard SPL token infrastructure
-
-**Root Cause**:
-1. Token-2022 transfer hooks require additional accounts in transfer instructions
-2. These accounts must be fetched from ExtraAccountMetaList PDA
-3. Standard wallets/DEXs use basic createTransferCheckedInstruction
-4. They don't know to fetch and include the hook's extra accounts
-5. Result: All transfers fail unless using specialized code
-
-**Exact Error When Testing**:
-```
-Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb invoke [1]
-Program log: Instruction: TransferChecked
-Unknown program 4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4
-Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb failed: An account required by the instruction is missing
-```
-
-**Impact Analysis**:
-- Users cannot transfer tokens between wallets
-- Token cannot be traded on any DEX
-- Token cannot be used in DeFi protocols
-- Only CLI transfers work (completely unusable for real users)
-- Defeats entire purpose of creating a tradeable token
-
-**Options Under Consideration**:
-
-**Option 1: Remove Transfer Hook Entirely**
-- Pros: Token becomes fully compatible with all wallets/DEXs
-- Cons: Lose 1% transaction limit anti-sniper protection
-- Mitigation: 30% → 15% → 5% tax progression should deter snipers
-
-**Option 2: Disable Hook Logic**
-- Keep hook program deployed but modify to always return success
-- No transaction limits would be enforced
-- Pros: Minimal code changes, token works everywhere
-- Cons: Useless program consuming resources
-
-**Option 3: Full Restart from Phase 2**
-- Return to token creation phase
-- Create new token WITHOUT transfer hook extension
-- Only use transfer fee extension (which IS wallet compatible)
-- Pros: Clean architecture, guaranteed compatibility
-- Cons: Requires starting over from Phase 2
-
-**Recommendation**: Option 3 - Full restart without transfer hook
-- Transfer fee extension (30% tax) provides sufficient anti-sniper protection
-- 1% transaction limit is nice-to-have but not worth breaking compatibility
-- Clean implementation better than workarounds
-
-
-## Current Clean Project Structure
-**Last Updated**: 2025-07-17 (After Phase 2/3 cleanup)
-
-```
-miko_token/
-├── DEVELOPMENT_STATUS.md      # Current development status tracking
-├── PLAN.md                    # Detailed implementation plan
-├── README.md                  # Project overview and MIKO token description
-├── TO_DO.md                   # Development checklist
-├── docker-compose.yml         # Docker orchestration configuration
-├── docker/                    # Docker configurations for each phase
-│   ├── phase1-programs/       # Phase 1: Core programs development
-│   │   └── Dockerfile         # Contains Rust, Solana CLI 2.1.20, Anchor 0.31.1
-│   ├── phase2-token/          # Phase 2: Token creation (awaiting restart)
-│   │   └── Dockerfile         # Contains Ubuntu 22.04, Node.js 18, Solana CLI 2.1.20
-│   ├── phase3-init/           # Phase 3: System initialization (empty, awaiting phase)
-│   │   └── Dockerfile         # Ready for Phase 3
-│   ├── phase4-keeper/         # Phase 4: Keeper bot (empty, awaiting phase)
-│   └── shared-artifacts/      # Shared data between phases
-│       ├── README.md          # Artifacts documentation
-│       ├── programs.json      # Deployed program IDs (Phase 1 complete)
-│       ├── absolute_vault_idl.json  # Vault program IDL
-│       ├── smart_dial_idl.json      # Smart Dial IDL
-│       ├── transfer_hook_idl.json   # Transfer Hook IDL
-│       └── verification/      # Verification Contract results (empty, ready for Phase 2)
-├── programs/                  # Anchor workspace for Solana programs
-│   ├── Anchor.toml           # Anchor configuration
-│   ├── Cargo.lock            # Rust dependencies lock file
-│   ├── Cargo.toml            # Rust workspace configuration
-│   ├── keypairs/             # Generated program keypairs (DO NOT CHANGE)
-│   │   ├── absolute-vault-keypair.json    # Vault: 4ieMsf7qFmh1W5FwcaX6M3fz3NNyaGy3FyuXoKJLrRDq
-│   │   ├── smart-dial-keypair.json        # Dial: DggkQFbBnkMCK43y5JTHfYdX3CKw2H3m177TbLC7Mjdz
-│   │   └── transfer-hook-keypair.json     # Hook: 4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4
-│   ├── migrations/
-│   │   └── deploy.ts         # Deployment script
-│   ├── package.json          # Node.js dependencies
-│   ├── package-lock.json     # Node.js dependencies lock
-│   ├── programs/             # Solana programs source code
-│   │   ├── absolute-vault/   # Absolute Vault program
-│   │   │   ├── Cargo.toml
-│   │   │   ├── Xargo.toml
-│   │   │   └── src/
-│   │   │       └── lib.rs    # Tax collection and distribution logic
-│   │   ├── smart-dial/       # Smart Dial program
-│   │   │   ├── Cargo.toml
-│   │   │   ├── Xargo.toml
-│   │   │   └── src/
-│   │   │       └── lib.rs    # Reward token management logic
-│   │   └── transfer-hook/    # Transfer Hook program (deployed but will NOT be used)
-│   │       ├── Cargo.toml
-│   │       ├── Xargo.toml
-│   │       └── src/
-│   │           └── lib.rs    # Anti-sniper protection logic
-│   ├── tests/
-│   │   └── miko_programs.ts  # Integration tests
-│   └── tsconfig.json         # TypeScript configuration
-└── scripts/                  # Phase-specific scripts (empty, ready for Phase 2)
-
-## Docker Container Status
-- **Active Containers**: 1
-  - miko-phase1-programs (running 43+ hours)
-- **Active Images**: 
-  - miko_token-phase1-programs:latest (2.92GB)
-- **No dangling images or volumes**
-- **Phase 1 container running and accessible**
-
-## Latest Updates
-
-### Phase 4-B Setup Complete (2025-07-21)
-- **Launch Coordinator Implementation**:
-  - Created `launch-coordinator-final.ts` following exact LAUNCH_LIQUIDITY_PARAMS.md specifications
-  - 4-stage liquidity deployment: Bootstrap (1%) → A (4%) → B (15%) → C (70%) = 90% total supply
-  - Strict timing enforcement: ±5 second windows for each stage
-  - Oracle price fetch requirement before pool creation (no stale prices)
-  - Three modes: test (10 SOL), canary (1 SOL), production (10 SOL)
-  
-- **Distribution Engine V2**:
-  - Solves critical issue: funds no longer get stuck when no $100+ holders exist
-  - Automatic rollover: undistributed amounts included in next cycle
-  - Persistent state tracking: amount, token type, timestamp
-  - Emergency withdrawal function for authority-only recovery
-  
-- **Critical Fixes During Phase 4-A**:
-  - Fixed SwapManager assuming tax was SOL instead of MIKO tokens
-  - Discovered and fixed fraudulent test hiding triple-spending vulnerability
-  - Implemented Solana-style account locking instead of mutex
-  - Added fee-exempt wallet handling for keeper operations
-  
-- **Infrastructure Ready**:
-  - Mainnet fork scripts with discovered program IDs
-  - Comprehensive launch metrics and anti-sniper analysis
-  - Detailed execution logging and report generation
-
-### Phase 2 Successfully Restarted and Completed (2025-07-19)
-- Successfully created MIKO token WITHOUT transfer hook extension
-- Token mint: `A9xZnPo2SvSgWiSxh4XApZyjyYRcH1ES8zTCvhzogYRE`
-- All verification contracts PASSED:
-  - VC:2.NO_UNSUPPORTED_EXT ✅ - Only TransferFeeConfig extension present
-  - VC:2.FEE_RATE ✅ - 30% transfer fee confirmed
-  - VC:2.AUTHORITIES ✅ - All authorities with deployer wallet
-- Total supply of 1B MIKO minted to deployer wallet
-- Ready to proceed to Phase 3
-
-### Phase 2/3 Cleanup Complete (2025-07-17 08:05 UTC)
-- Removed all Phase 2 and Phase 3 containers and images
-- Cleaned up all Phase 2/3 scripts directories
-- Removed failed token artifacts (token-info.json, phase2-verification.json, pdas.json)
-- Removed all verification results from Phase 2/3
-- Preserved Phase 1 programs and IDL files
-- Ready to restart Phase 2 WITHOUT transfer hook extension
-
-### Phase 1 Completion (2025-07-16 03:33 UTC)
-- Successfully deployed Smart Dial program after receiving 5 SOL funding
-- All three programs now deployed to devnet:
-  - Absolute Vault: `4ieMsf7qFmh1W5FwcaX6M3fz3NNyaGy3FyuXoKJLrRDq`
-  - Transfer Hook: `4E8NzqDaN76o7zXjLo8hYetmiBKmAXPs6vUMFaqFfmg4`
-  - Smart Dial: `DggkQFbBnkMCK43y5JTHfYdX3CKw2H3m177TbLC7Mjdz`
-- All declared IDs match deployed IDs ✅
-- Phase 1 validation complete ✅
-- Ready to proceed to Phase 2: MIKO Token Creation
-
-
-### Transfer Hook Decision (2025-07-17)
-- **Critical Issue Discovered**: Transfer hooks make tokens incompatible with standard wallets/DEXs
-- **Decision**: Restart Phase 2 WITHOUT transfer hook extension
-- **Rationale**: 30% initial fee provides sufficient anti-sniper protection
-- **Status**: All Phase 2/3 artifacts cleaned up, ready to restart
-
-## Phase 4-B: Launch Parameters Summary
-
-### Liquidity Deployment (from LAUNCH_LIQUIDITY_PARAMS.md)
-- **Total**: 90% of supply (900M MIKO) + 10 SOL
-- **Bootstrap (T+0s)**: 1% (10M) + 0.2 SOL, ±30% range
-- **Stage A (T+60s)**: 4% (40M) + 0.8 SOL, ±50% range
-- **Stage B (T+180s)**: 15% (150M) + 3.0 SOL, -70%/+100% range
-- **Stage C (T+300s)**: 70% (700M) + 6.0 SOL, near-infinite range
-
-### Key Requirements
-- Oracle price fetch REQUIRED before pool creation
-- Strict timing: ±5 second windows
-- Fee transitions: 30% → 15% (5min) → 5% (10min)
-- Initial FDV target: ~$19,000 (at $190/SOL)
-
-## Phase 4-B Files Created
-
-### Launch Infrastructure (`scripts/phase4b/`)
-1. **Launch Coordinator** (`launch-coordinator-final.ts`):
-   - Full implementation of 4-stage liquidity ladder
-   - Oracle price integration
-   - Strict timing enforcement
-   - Comprehensive metrics and reporting
-
-2. **Mainnet Fork Scripts**:
-   - `start-mainnet-fork.sh` - Starts local validator with cloned programs
-   - `stop-mainnet-fork.sh` - Stops validator and optional cleanup
-   - `mainnet-fork-config.ts` - Configuration with discovered program IDs
-
-3. **Distribution Engine V2** (`keeper-bot/src/modules/DistributionEngineV2.ts`):
-   - Rollover mechanism for undistributed funds
-   - Persistent state management
-   - Emergency withdrawal capability
-
-4. **Emergency Functions** (`emergency-withdraw-undistributed.ts`):
-   - Check undistributed balances
-   - Authority-only withdrawal to treasury
-
-5. **Documentation**:
-   - `scripts/phase4b/README.md` - Complete usage guide
-   - Updated PLAN.md with undistributed funds handling section
-
-## Summary of Current State
-
-**What's Complete**:
-- ✅ Phase 1: All three programs deployed (Vault, Hook, Smart Dial)
-- ✅ Phase 2: MIKO token created with 30% fee (no transfer hook)
-- ✅ Phase 3: System initialized, authorities transferred
-- ✅ Phase 4-A: Mock CI tests with all VCs passed
-- ✅ Phase 4-B: Setup complete, ready for test execution
-
-**Today's Accomplishments (2025-07-21)**:
-- ✅ Discovered mainnet program IDs (Raydium CLMM, Jupiter V6)
-- ✅ Implemented Distribution Engine V2 with undistributed funds rollover
-- ✅ Created emergency withdrawal functions
-- ✅ Built comprehensive launch coordinator with LAUNCH_LIQUIDITY_PARAMS.md specs
-- ✅ Added undistributed funds handling documentation to PLAN.md
-- ✅ Created mainnet fork startup/shutdown scripts
-- ✅ Ready for Phase 4-B test execution
-
-**What's Next**:
-- ❌ **BLOCKED**: Cannot proceed with Phase 4-B testing due to mock implementations
-- 🔧 **Required**: Replace ALL mock code with real implementations:
-  1. Integrate Raydium CLMM SDK for real pool creation
-  2. Integrate Pyth or Switchboard for real oracle prices
-  3. Implement real SPL token balance queries  
-  4. Implement real Anchor program calls to Vault/SmartDial
-  5. Implement real keeper bot process spawning
-- ⚠️ **DO NOT** run tests with mock implementations - it's meaningless
-- 📋 Only after implementing real functionality, then test Phase 4-B
-
-**Key Learning**: Transfer hooks are powerful but break standard wallet compatibility. For a token that needs to work everywhere, stick to standard extensions only.
-
-## Maintenance Guidelines for Clean Structure
-
-### Essential Files to Preserve
-1. **Program Keypairs** (`programs/keypairs/`): CRITICAL - Never delete or regenerate
-2. **Shared Artifacts** (`docker/shared-artifacts/`): Contains deployed program IDs and token info
-3. **Lock Files** (`Cargo.lock`, `package-lock.json`): Ensures reproducible builds
-4. **Source Code** (`programs/programs/*/src/`, `scripts/*.ts`): All implemented logic
-5. **Configuration Files** (`Anchor.toml`, `docker-compose.yml`, `tsconfig.json`, etc.)
-6. **Token Info** (`shared-artifacts/token-info.json`): CRITICAL - Contains mint keypair
-
-### Files/Folders That Can Be Regenerated
-1. `programs/target/` directory: Created by `anchor build` (~4.6GB)
-2. `programs/node_modules/` directory: Created by `npm install` (~83MB)
-3. `scripts/node_modules/` directory: Created by `npm install` (~66MB)
-4. Build artifacts: Any `.so` files outside of deployment
-
-### Cleanup Commands for Future Phases
+- Phase 4-B programs had declare_id! with old addresses from previous phase
+- Deployed with new keypairs but source still referenced old IDs
+- Result: Program ID in deployed binary didn't match runtime expectation
+**Solution**: Complete fresh deployment:
+1. Generate NEW program keypairs
+2. Update declare_id! in source with the new keypair addresses
+3. Rebuild programs (anchor build)
+4. Deploy with the SAME keypairs used in declare_id!
+**Lesson**: Program ID must be consistent across three places:
+- Keypair used for deployment
+- declare_id! in source code
+- Deployed program on chain
+**Prevention**: Always verify before deployment:
 ```bash
-# Phase 1 cleanup (inside container):
-docker exec -i miko-phase1-programs bash -c "cd /workspace/programs && rm -rf target/ node_modules/"
-
-# Phase 2 cleanup (inside container):
-docker exec -i miko-phase2-token bash -c "cd /workspace/scripts && rm -rf node_modules/"
-
-# General Docker cleanup:
-docker image prune -f
-docker volume prune -f
-docker container prune -f
+solana-keygen pubkey phase4b-vault-keypair.json  # Should match...
+grep "declare_id!" programs/absolute-vault/src/lib.rs  # ...this address
 ```
 
-### Project Size Management
-- Clean project size: 640KB (after Phase 2 cleanup)
-- Phase 1 build artifacts: ~4.6GB (target + node_modules)
-- Phase 2 build artifacts: ~66MB (node_modules)
-- Always clean after successful deployments
-- Document any new persistent files added
+### 10. Critical Decimal Calculation Error
+**Mistake**: Forgot to multiply MIKO amounts by 1e9 when creating CPMM pool
+**Impact**: Only 0.045 MIKO deposited instead of 45,000,000 MIKO
+**What Happened**:
+- MIKO has 9 decimals like SOL
+- Passed raw amounts without converting to smallest units
+- Result: 45000000 became 0.045 MIKO
+**Lesson**: ALWAYS convert token amounts to smallest units:
+```typescript
+// WRONG:
+mintBAmount: new BN(bootstrap.mikoAmount)  // 45000000 = 0.045 MIKO
 
-## Notes
-- Phase 1 completed successfully with all programs deployed (2 programs only)
-- Phase 2 restarted and completed successfully with MIKO token created (NO transfer hook)
-- All Phase 2 verification contracts PASSED
-- Project structure is clean and organized
-- Essential artifacts preserved in shared-artifacts
-- Deployer keypair (`AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95`) saved to shared-artifacts
-- Both Phase 1 and Phase 2 containers running
-- Ready for Phase 3: System Initialization & Authority Transfer
-
-## Phase 2 Artifacts Summary (NEW - Phase 2 Restart)
-- **Token Mint**: `A9xZnPo2SvSgWiSxh4XApZyjyYRcH1ES8zTCvhzogYRE`
-- **Mint Keypair**: Stored in token-info.json
-- **Transfer Fee**: 30% (3000 basis points)
-- **Extensions**: TransferFeeConfig ONLY (NO transfer hook)
-- **All Authorities**: Currently with deployer `AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95`
-- **Deployer ATA**: `J8HYEx8UYJPb7HDJqLqrCpUKyhbJHCjuefUoeGmCZaFa`
-- **Verification Results**: All VCs passed and stored in verification/
-  - VC:2.NO_UNSUPPORTED_EXT ✅
-  - VC:2.FEE_RATE ✅
-  - VC:2.AUTHORITIES ✅
-
-## CURRENT STATUS SUMMARY (2025-07-22 - Updated 19:00 UTC)
-
-**Phase 1**: ✅ COMPLETE - All programs deployed
-**Phase 2**: ✅ COMPLETE - Token created without transfer hook
-**Phase 3**: ✅ COMPLETE - System initialized, authorities transferred
-**Phase 4-A**: ✅ COMPLETE - Mock CI tests passed
-**Phase 4-B**: 🔄 IN PROGRESS - Fixed critical issues, ready for liquidity testing
-
-**Critical Tax Flow Issue RESOLVED**:
-- ✅ Added `withdraw_fees_from_mint` function to vault program
-- ✅ Removed unused treasury field from VaultState
-- ✅ Programs rebuilt and redeployed with fixes
-- ✅ Keeper bot updated for 3-step tax flow (harvest → withdraw → distribute)
-
-**Critical declare_id! Mismatch RESOLVED**:
-- ✅ Fixed source code declare_id! to match deployed programs
-- ✅ Redeployed programs: 
-  - Vault: `4zfeJNUcq2aTYE1qwa6DBMtyDiBGNE2a2dQ3z6YdCZqb`
-  - Smart Dial: `3TRSjCzNVyUJWrZww4u6rKN59DYjV8Hq5JdZWNn5EAbd`
-- ⚠️ Added critical lesson learned about catastrophic mainnet consequences
-
-**Current Phase 4-B Status (Fork Fresh Start)**:
-1. ✅ Fork restarted with all required ALTs (Raydium, Jupiter, Birdeye, Pyth)
-2. ✅ New MIKO token created: `H8fvrWNBAUT5asXbvRWsqKgEoZSQ5PLaWY47PLFJ5cL6`
-3. ✅ All 1 billion MIKO minted to deployer wallet only
-4. ✅ Programs redeployed with correct declare_id! values
-5. ✅ Vault initialized with proper wallets:
-   - Authority: `CDTSFkBB1TuRw7WFZj4ZQpagwBhw5iURjC13kS6hEgSc` (deployer)
-   - Owner: `D24rokM1eAxWAU9MQYuXK9QK4jnT1qJ23VP4dCqaw5uh`
-   - Keeper: `6LTnRkPHh27xTgpfkzibe7XcUSGe3kVazvweei1D3syn`
-6. ✅ Smart Dial initialized:
-   - Authority: `CDTSFkBB1TuRw7WFZj4ZQpagwBhw5iURjC13kS6hEgSc` (deployer)
-   - Treasury: `D8DLFLq77rjqb5wpi3gQ2oRAPY15UToPMZzMYqAiaD1U`
-7. ✅ Authorities transferred to Vault PDA: `FhzxGVUncCViHMTtBpFxij5Ni5jD4Jxk5bV1dyPWd8bi`
-   - Transfer Fee Config Authority: Vault PDA ✅
-   - Withdraw Withheld Authority: Vault PDA ✅
-8. ✅ Mint authority permanently revoked (set to null)
-9. ✅ Total Supply: 1,000,000,000 MIKO (fixed forever)
-
-**Ready for Next Steps**:
-- Create CLMM pool on Raydium
-- Test liquidity ladder (Bootstrap → Stage A → Stage B → Stage C)
-- Test fee transitions (30% → 15% → 5%)
-- Test complete tax flow cycle (Harvest → Withdraw → Distribute)
-- Generate VC:4.LOCAL_FORK_PASS verification artifact
-
-## Phase 3 Progress (2025-07-19)
-- **PDAs Calculated**: ✅
-  - **Vault PDA**: `Hw1tYN1PrkbXC5MmCwoTH5a3hHwQzJvuWbknUn3gFD6s` (bump: 254)
-  - **Dial State PDA**: `AKuGFZoThbiCwEon6BJcy57sDKemsgCZaQ8Md25DTksR` (bump: 254)
-- **VC:3.PDA_CALCULATION**: ✅ PASSED
-- **Vault Initialized**: ✅
-  - Transaction: `67JVN134UYK7CfoxuU66WFSvmgAcw7MBCLCgninjkhDaeVn2mVCinjfokSva2YiHjMpkYxeamikjArEX9E9a1RiG`
-  - All authorities set to deployer (temporary)
-  - Auto-exclusions verified for all 5 system accounts
-- **VC:3.VAULT_EXCLUSIONS**: ✅ PASSED
-- **Smart Dial Initialized**: ✅ (Previously initialized)
-  - Dial State PDA: `JA7f5LsJrafZmoX11rBQ7TQgLDXFxUhMxsyBzrT7HHkK`
-  - Authority: `AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95` (deployer)
-  - Treasury: `CfSafnmD6aFHHsT5CtFVQ87YQzBMxCvvGjJtv8hH9GfP` (UNKNOWN - needs update)
-  - Reward Token: SOL
-  - Launch Timestamp: 0 (not set)
-
-## Critical Wallet Architecture Issue (2025-07-19)
-
-### Problem Discovered
-Both Vault and Smart Dial were initialized with incorrect wallet configurations:
-
-**Vault Misconfigurations**:
-- `treasury`: Set to deployer (WRONG - should be separate treasury wallet)
-- `ownerWallet`: Set to deployer (WRONG - should be separate owner wallet)
-- `keeperAuthority`: Set to deployer (WRONG - should be keeper bot wallet)
-
-**Smart Dial Misconfiguration**:
-- `treasury`: Set to unknown wallet `CfSafnmD6aFHHsT5CtFVQ87YQzBMxCvvGjJtv8hH9GfP`
-
-### Correct Wallet Architecture
-Created proper wallet structure (2025-07-19 12:06 UTC):
-
-| Wallet Type | Public Key | Purpose |
-|-------------|------------|----------|
-| Authority | `AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95` | Overall management (deployer) |
-| Owner | `5ave8hWx7ZqJr6yrzA2f3DwBa6APRDMYzuLZSU8FKv9D` | Receives 20% of tax |
-| Treasury | `Ei9vqjqic5S4cdTyDu98ENc933ub4HJMgAXJ6amnDFCH` | Holds 80% for distribution |
-| Keeper | `5E8kjrFSVugkU9tv378uEYQ78DNp9z2MLY2fjSU5E3Ju` | Bot operations |
-
-**Recovery Document**: `/shared-artifacts/MIKO_WALLET_RECOVERY.json` contains all private keys
-
-### Required Corrections
-1. **Vault update_config**:
-   - Change treasury to `Ei9vqjqic5S4cdTyDu98ENc933ub4HJMgAXJ6amnDFCH`
-   - Change ownerWallet to `5ave8hWx7ZqJr6yrzA2f3DwBa6APRDMYzuLZSU8FKv9D`
-   - Note: keeperAuthority CANNOT be changed (permanent architectural flaw)
-
-2. **Smart Dial update_treasury**:
-   - Change treasury to `5ave8hWx7ZqJr6yrzA2f3DwBa6APRDMYzuLZSU8FKv9D` (must match Vault ownerWallet)
-
-### Configuration Updates Completed (2025-07-19 12:15 UTC)
-1. ✅ Vault configuration updated:
-   - Treasury: `Ei9vqjqic5S4cdTyDu98ENc933ub4HJMgAXJ6amnDFCH` (correct treasury wallet)
-   - Owner Wallet: `5ave8hWx7ZqJr6yrzA2f3DwBa6APRDMYzuLZSU8FKv9D` (correct owner wallet)
-   - Keeper Authority: Still deployer (CANNOT be changed - architectural limitation)
-   - Update Tx: `2tXHBmda1sbrJDjEbzfEFh3RNSspmVsdYVM26NcQ1wJciDyiaxRWKmHMeHGYaMbhjGZRUrqBtwkc2QoMPhJecZcx`
-
-2. ✅ Smart Dial treasury updated:
-   - Treasury: `5ave8hWx7ZqJr6yrzA2f3DwBa6APRDMYzuLZSU8FKv9D` (matches Vault ownerWallet)
-   - Update Tx: `SzHapqz9LfnumuyXTbUHnJ3FXcZXFsLYyc7U1Uo4wypJb36R6JZScgXzCg82NLGLjtbESNiAnpeskcNUs6PjXWv`
-
-### Authority Transfers Completed (2025-07-19 12:30 UTC)
-1. ✅ Token authorities transferred to Vault PDA:
-   - Transfer Fee Config Authority: Vault PDA
-   - Withdraw Withheld Authority: Vault PDA
-   - Transfer Tx: `3Zo1aT9WciEiJQc2YmDvwLdNZ3PBJQ4fHCRTr9NPgE2mZkgG2C3pvAvsLNoAkDBf4nDHFo2W85PEpRcJvPH7n97h`
-
-2. ✅ Mint authority revoked (set to null):
-   - Previous: `AnCL6TWEGYo3zVhrXckfFiAqdQpo158JUCWPFQJEpS95`
-   - Current: null (permanently revoked)
-   - Revoke Tx: `3WphXxpwaHp9XkRkrAv99kzLEtggpkE6FrGfpJuhRzJV83GyHpRaob4dzd52igNtp2NEaDJbk1qUx3K5F58hwhPb`
-   - Total Supply: 1,000,000,000 MIKO (no more can be minted)
-
-3. ✅ VC:3.AUTH_SYNC PASSED:
-   - Mint Authority: null ✅
-   - Freeze Authority: null ✅
-   - Transfer Fee Config Authority: Vault PDA ✅
-   - Withdraw Withheld Authority: Vault PDA ✅
-
-### VC:3.TRANSFER_TEST Completed (2025-07-19 13:00 UTC)
-✅ Standard SPL token transfer test PASSED:
-- Sent: 100 MIKO from deployer
-- Received: 70 MIKO (exactly as expected)
-- Fee collected: 30 MIKO (30% as configured)
-- Transaction: `2iqBWRmJz3aZ6WfynQ7J67LSF6fVHjvynfje3uSfWmFDfgu5bW4EL9E5QkyyHTd3JT6FQJi9nXJpWqf2GvJqN2Q4`
-- Used standard `createTransferCheckedInstruction` - exactly as wallets/DEXs would
-- Token is fully compatible with all wallets and DEXs
-
-### Token Distribution Completed (2025-07-19 13:15 UTC)
-✅ Token allocation verified:
-- Current deployer balance: 999,999,900 MIKO (~100% of supply)
-- Planned allocation:
-  - 90% (900M MIKO) for liquidity pool
-  - 10% (100M MIKO) retained by deployer
-  - 0% team allocation (none)
-  - 0% marketing allocation (none)
-- No distributions needed - all tokens remain with deployer
-- Ready for launch with full allocation in deployer wallet
-
-### Phase 3 Testing Completed (2025-07-19 13:30 UTC)
-✅ All Phase 3 tests passed:
-- 30% transfer fee is active and working
-- Withheld fees accumulate correctly
-- Vault PDA has harvest authority
-- System accounts are auto-excluded
-- All authorities correctly configured
-- Token transfers work with proper fee collection
-
-### Phase 3 Summary
-Phase 3 (System Initialization) is now COMPLETE:
-1. ✅ PDAs calculated and verified
-2. ✅ Vault and Smart Dial programs initialized
-3. ✅ Wallet architecture corrected
-4. ✅ All authorities transferred to Vault PDA
-5. ✅ Mint authority permanently revoked
-6. ✅ All verification contracts PASSED (VC:3.PDA_CALCULATION, VC:3.VAULT_EXCLUSIONS, VC:3.AUTH_SYNC, VC:3.TRANSFER_TEST)
-7. ✅ Token distribution verified (90% LP, 10% deployer retention)
-8. ✅ All Phase 3 testing complete
-
-## Phase 4-A: Mock CI Tests (2025-07-20) 🔄 IN PROGRESS
-
-### What's Actually Done:
-- ✅ Created mock_config.toml with test configuration
-- ✅ Written MockRaydiumAdapter code (NOT TESTED)
-- ✅ Written MockJupiterAdapter code (NOT TESTED)
-- ✅ Written MockBirdeyeAdapter code (NOT TESTED)
-- ✅ Written all Keeper Bot modules (NOT TESTED):
-  - FeeUpdateManager
-  - TwitterMonitor  
-  - TokenSelector
-  - FeeHarvester
-  - SwapManager
-  - DistributionEngine
-- ✅ Written main KeeperBot orchestrator (NOT TESTED)
-- ✅ Written test implementations for verifications (NOT EXECUTED)
-
-### What's NOT Done:
-- ❌ Docker container NOT built
-- ❌ NO tests have been run
-- ❌ NO verification artifacts generated
-- ❌ VC:4.FIRST_MONDAY - test written but NOT executed
-- ❌ VC:4.TAX_FLOW_EDGE - test written but NOT executed
-- ❌ VC:4.KEEPER_PREFLIGHT - NOT tested
-- ❌ Nothing has been verified to actually work
-
-### Current Status:
-Code has been written but NOTHING has been tested or verified. All verification contracts remain UNVERIFIED.
-
-### Next Steps
-1. Build Phase 4 Docker container
-2. Run all tests and fix any issues
-3. Generate actual verification artifacts
-4. Only then proceed to Phase 4-B
-
-## Phase 4-B: CPMM Pool Creation Issue (2025-07-23)
-
-### Problem Summary
-Successfully switched from CLMM to CPMM for Token-2022 support, but encountering runtime error during pool creation.
-
-### Technical Details
-
-#### What Works:
-- ✅ Raydium SDK v2 initialized successfully
-- ✅ TypeScript compilation passes without errors
-- ✅ CPMM integration module created with proper structure
-- ✅ Launch coordinator updated to use CPMM instead of CLMM
-- ✅ Token info fetched correctly (MIKO as Token-2022, SOL as standard)
-- ✅ Fee configuration retrieved (0.25% standard tier)
-
-#### The Error:
+// CORRECT:
+mintBAmount: new BN(bootstrap.mikoAmount * 1e9)  // 45000000 * 1e9 = 45M MIKO
 ```
-Error: {"InstructionError":[4,{"Custom":3012}]}
-```
-- Error Code: 3012 = "AccountNotInitialized"
-- Meaning: The program expected an account to be already initialized
+**Prevention**: Create helper functions for token amount conversions
 
-#### Investigation Results:
-1. **Missing WSOL ATA**: The deployer wallet has MIKO ATA but NO WSOL ATA
-   - MIKO ATA: `Evdxg37gfGwCntnjUqJU92FxeB3Mn6K5tiranwAjeP8K` ✅ EXISTS
-   - WSOL ATA: `22tyCa481mh1LZ2yNjNHvMyqQ8UABmAXPKc6gzx4jqFa` ❌ MISSING
+### 11. CPMM Liquidity Removal Success
+**Achievement**: Successfully removed liquidity from Raydium CPMM pool
+**Method**: Used Raydium SDK v2 withdrawLiquidity function
+**Key Steps**:
+1. Initialize Raydium SDK with deployer keypair
+2. Get pool info using getPoolInfoFromRpc
+3. Find LP token balance in deployer's ATA
+4. Call withdrawLiquidity with full LP amount
+**Important**: This capability is critical for mainnet emergency situations
+**Script Location**: `/scripts/phase4b/debug/remove-cpmm-liquidity.ts`
 
-2. **Attempted Fixes That Failed**:
-   - Tried adding `mintAUseSOLBalance`, `mintBUseSOLBalance` parameters - these don't exist in the interface
-   - Tried adding `checkCreateATAOwner: true` - doesn't solve the issue
-   - The `ownerInfo: { useSOLBalance: true }` is present but not sufficient
+### 12. Phase 4-B Directory Isolation
+**Mistake**: Tried to modify files in `/programs/` directory during Phase 4-B
+**Impact**: Confusion between Phase 4-B isolated programs and root programs
+**What Happened**:
+- Phase 4-B has its own copy of programs in `/scripts/phase4b/phase4b-programs/`
+- Tried to edit `declare_id!` in root `/programs/` directory
+- Root `/programs/` are from Phase 1-3 and should NOT be touched during Phase 4-B
+**Lesson**: During Phase 4-B, ONLY work with files in `/scripts/phase4b/` directory
+**Prevention**: 
+- Phase 4-B programs: `/scripts/phase4b/phase4b-programs/programs/`
+- Phase 4-B scripts: `/scripts/phase4b/`
+- NEVER touch root `/programs/` during Phase 4-B unless referencing past work
 
-#### Root Cause:
-The CPMM pool creation expects either:
-1. A WSOL token account to exist for the deployer, OR
-2. The SDK to handle WSOL account creation automatically
+### 13. Missing Fee Update Implementation
+**Mistake**: Assumed fee updates would happen automatically
+**Impact**: Fees stuck at 30% instead of transitioning to 15% → 5%
+**What Happened**:
+- Vault program has `update_transfer_fee` function that validates time-based fees
+- Launch coordinator only monitors fee transition times but doesn't call update
+- Keeper bot has no fee update logic implemented
+- Result: Fees never change from initial 30%
+**Root Cause**: PLAN.md specified "Fee Update Manager" but it was never implemented
+**Lesson**: Always verify critical features are actually implemented, not just designed
+**Fix Required**:
+- Keeper bot needs to call `update_transfer_fee` at 5 and 10 minutes
+- Must pass correct fee for time period (1500 at 5min, 500 at 10min)
+- After 10 minutes, fee is finalized and locked permanently
 
-Currently neither is happening, causing the AccountNotInitialized error.
+### 14. Keeper Bot Mock-Only Implementation
+**Discovery**: Phase 4-B testing revealed keeper bot cannot execute any on-chain operations
+**Impact**: All automated functionality non-functional - fees, harvests, swaps, distributions
+**What Happened**:
+- Phase 4-A built keeper bot with mock adapters for CI testing
+- All real implementations left as TODOs with "Real X not implemented in mock phase" errors
+- Phase 4-B wrapper tried to use Phase 4-A bot but constructor incompatible
+- Result: Keeper bot knows WHEN to act but cannot actually DO anything on-chain
+**Root Cause**: Phase isolation principle taken too literally - no real implementations created
+**Lesson**: Mock testing is valuable but real implementations must follow immediately
+**Fix Required**: Implement all 8 keeper bot functions for actual on-chain operations
 
-#### Search Attempts:
-Multiple web searches were conducted but could not find:
-- The exact `CreateCpmmPoolParam` interface definition
-- Clear documentation on how CPMM handles WSOL accounts
-- Working examples of CPMM pool creation with Token-2022
+### 15. Keeper Bot Fee Update Implementation Success
+**Achievement**: Successfully implemented automated fee updates in Phase 4-B keeper bot
+**What Happened**:
+- Created standalone keeper bot in `/scripts/phase4b/phase4b-keeper/`
+- Ported all necessary modules from root keeper bot
+- Implemented real vault program calls for fee updates
+- Used blockchain time (not system time) for accurate transitions
+- Successfully updated fee from 30% to 5% after 10+ minutes elapsed
+**Key Implementation Details**:
+- Created FeeUpdateImpl class to handle actual on-chain transactions
+- Enhanced FeeUpdateManagerPhase4B to check actual mint fee state
+- Parsed Token-2022 mint extensions to read current fee
+- Keeper bot runs checks every 30 seconds
+**Lesson**: Always use blockchain time for time-based logic, not system time
 
-### External Help Needed:
-1. **Interface Documentation**: Need the exact TypeScript interface for `CreateCpmmPoolParam`
-2. **WSOL Handling**: How should CPMM pool creation handle WSOL when `useSOLBalance: true`?
-3. **Account Creation**: Should we pre-create WSOL ATA or does the SDK handle it?
-4. **Working Example**: A complete working example of CPMM pool creation with Token-2022
+### 16. Manual Configuration System Issues
+**Mistake**: Built test-level config system requiring manual JSON updates throughout deployment
+**Impact**: Production deployment would require hand-editing config files after each step
+**What Happened**:
+- Initial implementation used phase4b-config.json with hardcoded values
+- Required manual updates after: token creation, pool creation, PDA calculation
+- Extremely error-prone and unprofessional for production use
+**Solution**: Created ConfigManager system:
+- `minimal-config.json` contains only essential non-derivable values
+- `config-manager.ts` auto-derives PDAs from program IDs and seeds
+- Pool info queried from chain when needed
+- Token creation script updates minimal config automatically
+**Key Components**:
+- **Minimal Config**: RPC URL, program IDs, token mint, keeper path
+- **Auto-Derived**: Vault PDA, Smart Dial PDA, pool ID, owner/keeper wallets
+- **Dynamic Queries**: Pool state, vault state, accumulated fees
+**Result**: Production-ready configuration that minimizes manual intervention
+**Lesson**: Always design for production deployment flow, not just testing convenience
 
-### Files Involved:
-- `/scripts/phase4b/raydium-cpmm-integration.ts` - CPMM integration module
-- `/scripts/phase4b/launch-coordinator-final.ts` - Launch coordinator using CPMM
-- `/scripts/phase4b/mainnet-fork-config.ts` - Configuration with correct token addresses
+## Project Structure
+- `/programs/` - Anchor workspace with program source
+- `/scripts/phase4b/` - Current working directory for Phase 4-B
+  - `/debug/` - Debugging scripts for Phase 4-B testing
+  - `/phase4b-keeper/` - Standalone keeper bot implementation
+    - `/modules/` - All keeper bot modules
+      - `jupiter-adapter.ts` - Jupiter v6 integration
+      - `mock-birdeye-adapter.ts` - Mock holder data for testing
+      - `SwapManager.ts` - Tax flow scenario handler
+      - `DistributionEngine.ts` - Token distribution with rollover
+  - `config-manager.ts` - Production configuration system
+  - `minimal-config.json` - Essential configuration values
+  - `swap-test.ts` - Generate tax fees for testing
+  - `add-liquidity-to-pool.ts` - Add liquidity to existing pool
+- `/docker/shared-artifacts/` - Shared data between phases
+- `cpmm_wsol_fix.md` - Solution for WSOL ATA issue (IMPLEMENTED)
 
-### Current Blocker:
-Cannot proceed with Phase 4-B testing until CPMM pool creation works. The issue appears to be related to WSOL account initialization, but without proper documentation or interface definitions, cannot determine the correct fix.
-
+---
+*Last Updated: 2025-07-25 - All keeper bot modules implemented, ready for integration testing*

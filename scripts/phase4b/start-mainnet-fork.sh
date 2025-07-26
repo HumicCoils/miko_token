@@ -34,6 +34,10 @@ declare -a COMMON_CLONES=(
     # Jupiter for swaps
     "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"  # Jupiter V6
     
+    # Raydium CPMM Config Accounts (required for pool creation)
+    "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"  # CPMM Config 0 (0.25% fee)
+    "DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8"  # CPMM Fee Receiver (required for pool creation)
+    
     # Pyth Oracle Price Feeds
     "H6ARHf6YXhGYeQfUzQNGk6rDNnLBQKrenN712K4AQJEG"  # SOL/USD
     "Gnt27xtC473ZT2Mw5u8wZ68Z3gULkSTb5DuxJy7eJotD"  # USDC/USD

@@ -8,7 +8,7 @@ import {
 import * as fs from 'fs';
 import { ConfigManager } from './config-manager';
 
-async function revokeMintAuthority() {
+async function revokeFreezeAuthority() {
   // Use ConfigManager to get auto-derived configuration
   const configManager = new ConfigManager('./minimal-config.json');
   const config = await configManager.getFullConfig();
@@ -20,7 +20,7 @@ async function revokeMintAuthority() {
   
   const mintPubkey = new PublicKey(config.token.mint_address);
   
-  console.log('Revoking mint authority...');
+  console.log('Revoking freeze authority...');
   console.log('MIKO Token:', mintPubkey.toBase58());
   console.log('Current Authority:', deployer.publicKey.toBase58());
   
@@ -28,35 +28,33 @@ async function revokeMintAuthority() {
   const mintInfoBefore = await getMint(connection, mintPubkey, 'confirmed', TOKEN_2022_PROGRAM_ID);
   
   console.log('\nBefore revocation:');
-  console.log('- Mint Authority:', mintInfoBefore.mintAuthority?.toBase58() || 'null');
-  console.log('- Total Supply:', (mintInfoBefore.supply / BigInt(10 ** 9)).toString(), 'MIKO');
+  console.log('- Freeze Authority:', mintInfoBefore.freezeAuthority?.toBase58() || 'null');
   
-  if (!mintInfoBefore.mintAuthority) {
-    console.log('\nMint authority is already null!');
+  if (!mintInfoBefore.freezeAuthority) {
+    console.log('\nFreeze authority is already null!');
     return;
   }
   
   try {
-    // Revoke mint authority (set to null)
-    console.log('\nRevoking mint authority (setting to null)...');
+    // Revoke freeze authority (set to null)
+    console.log('\nRevoking freeze authority (setting to null)...');
     const revokeSig = await setAuthority(
       connection,
       deployer,
       mintPubkey,
       deployer,
-      AuthorityType.MintTokens,
+      AuthorityType.FreezeAccount,
       null, // Set to null to permanently revoke
       [],
       undefined,
       TOKEN_2022_PROGRAM_ID
     );
-    console.log('✓ Mint authority revoked! Tx:', revokeSig);
+    console.log('✓ Freeze authority revoked! Tx:', revokeSig);
     
     // Verify revocation
     const mintInfoAfter = await getMint(connection, mintPubkey, 'confirmed', TOKEN_2022_PROGRAM_ID);
     console.log('\nAfter revocation:');
-    console.log('- Mint Authority:', mintInfoAfter.mintAuthority?.toBase58() || 'null (permanently revoked)');
-    console.log('- Total Supply:', (mintInfoAfter.supply / BigInt(10 ** 9)).toString(), 'MIKO (no more can be minted)');
+    console.log('- Freeze Authority:', mintInfoAfter.freezeAuthority?.toBase58() || 'null (permanently revoked)');
     
     // Save revocation info
     const revocationInfo = {
@@ -65,16 +63,15 @@ async function revokeMintAuthority() {
       previousAuthority: deployer.publicKey.toBase58(),
       newAuthority: null,
       signature: revokeSig,
-      totalSupply: '1,000,000,000 MIKO',
-      note: 'Mint authority permanently revoked. No more MIKO can ever be minted.',
+      note: 'Freeze authority permanently revoked. No accounts can ever be frozen.',
     };
     
-    fs.writeFileSync('phase4b-mint-authority-revocation.json', JSON.stringify(revocationInfo, null, 2));
-    console.log('\nRevocation info saved to phase4b-mint-authority-revocation.json');
+    fs.writeFileSync('phase4b-freeze-authority-revocation.json', JSON.stringify(revocationInfo, null, 2));
+    console.log('\nRevocation info saved to phase4b-freeze-authority-revocation.json');
     
   } catch (error) {
-    console.error('Failed to revoke mint authority:', error);
+    console.error('Failed to revoke freeze authority:', error);
   }
 }
 
-revokeMintAuthority().catch(console.error);
+revokeFreezeAuthority().catch(console.error);
