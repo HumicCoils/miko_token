@@ -217,33 +217,13 @@ export class HarvestImpl {
         logger.warn('Vault token account does not exist, it will be created during withdrawal');
       }
 
-      // Get current withheld amount from mint
-      const mintInfo = await this.connection.getAccountInfo(this.tokenMint);
-      let withheldAmount = 0;
+      // Get current withheld amount from mint using SPL Token library
+      const { getMint, getTransferFeeConfig } = await import('@solana/spl-token');
+      const mintInfo = await getMint(this.connection, this.tokenMint, 'confirmed', TOKEN_2022_PROGRAM_ID);
+      const transferFeeConfig = getTransferFeeConfig(mintInfo);
+      const withheldAmount = transferFeeConfig ? Number(transferFeeConfig.withheldAmount) : 0;
       
-      if (mintInfo) {
-        const data = mintInfo.data;
-        
-        // Parse mint extensions to find withheld amount
-        let offset = 82; // Base mint size
-        const extensionTypeSize = 2;
-        const lengthSize = 2;
-        
-        while (offset + extensionTypeSize + lengthSize <= data.length) {
-          const extensionType = data.readUInt16LE(offset);
-          const extensionLength = data.readUInt16LE(offset + extensionTypeSize);
-          
-          if (extensionType === 1) { // TransferFeeConfig
-            // Withheld amount is at offset 48 in the extension
-            const feeConfigOffset = offset + extensionTypeSize + lengthSize;
-            withheldAmount = Number(data.readBigUInt64LE(feeConfigOffset + 48));
-            logger.info(`Found ${withheldAmount} withheld fees in mint`);
-            break;
-          }
-          
-          offset += extensionTypeSize + lengthSize + extensionLength;
-        }
-      }
+      logger.info(`Found ${withheldAmount / 1e9} MIKO withheld fees in mint`);
 
       if (withheldAmount === 0) {
         logger.warn('No withheld fees in mint to withdraw');
@@ -253,8 +233,25 @@ export class HarvestImpl {
         };
       }
 
+      // Build transaction
+      const tx = new Transaction();
+      
+      // Create vault token account if it doesn't exist
+      if (!accountInfo) {
+        const { createAssociatedTokenAccountInstruction } = await import('@solana/spl-token');
+        const createAtaIx = createAssociatedTokenAccountInstruction(
+          this.keeper.publicKey, // payer
+          vaultTokenAccount,     // ata
+          this.vaultPda,         // owner
+          this.tokenMint,        // mint
+          TOKEN_2022_PROGRAM_ID, // token program
+        );
+        tx.add(createAtaIx);
+        logger.info('Added instruction to create vault token account');
+      }
+      
       // Build the withdraw_fees_from_mint instruction
-      const tx = await this.vaultProgram.methods
+      const withdrawIx = await this.vaultProgram.methods
         .withdrawFeesFromMint()
         .accounts({
           vault: this.vaultPda,
@@ -263,7 +260,9 @@ export class HarvestImpl {
           vaultTokenAccount: vaultTokenAccount,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .transaction();
+        .instruction();
+      
+      tx.add(withdrawIx);
 
       // Send and confirm transaction
       const txSignature = await sendAndConfirmTransaction(

@@ -45,9 +45,14 @@ class Phase4BKeeperBot {
       commitment: this.config.network.commitment as any,
     });
     
-    // Load keeper keypair
-    const keeperData = JSON.parse(fs.readFileSync('./phase4b-keeper-keypair.json', 'utf-8'));
-    this.keeper = Keypair.fromSecretKey(new Uint8Array(keeperData));
+    // CRITICAL BUG: Vault was initialized with deployer as keeper_authority
+    // This SHOULD have been the keeper keypair from phase4b-keeper-keypair.json
+    // Using deployer keypair here is ONLY FOR TESTING - this is a SECURITY RISK
+    // TODO: Fix vault initialization to properly separate authorities:
+    //   - authority: deployer (admin control)
+    //   - keeper_authority: keeper keypair (operational control)
+    const deployerData = JSON.parse(fs.readFileSync('../phase4b-deployer.json', 'utf-8'));
+    this.keeper = Keypair.fromSecretKey(new Uint8Array(deployerData));
     
     // Load IDLs
     this.vaultIdl = JSON.parse(fs.readFileSync('../phase4b-vault-idl.json', 'utf-8'));
@@ -187,20 +192,31 @@ class Phase4BKeeperBot {
       const shouldHarvest = await this.feeHarvester.shouldHarvest();
       if (!shouldHarvest) return;
       
-      logger.info('Harvest threshold met, executing 3-step process');
+      logger.info('Harvest threshold met, executing process');
       
-      // Step 1: Harvest fees
-      const harvestResult = await this.feeHarvester.harvest();
-      if (!harvestResult.success) {
-        logger.error('Harvest failed', harvestResult);
-        return;
-      }
+      // Check if vault already has funds
+      const vaultBalance = await this.feeHarvester.getVaultBalance();
+      let amountToProcess = vaultBalance;
       
-      // Step 2: Withdraw from mint
-      const withdrawResult = await this.feeHarvester.withdrawFromMint();
-      if (!withdrawResult.success) {
-        logger.error('Withdraw failed', withdrawResult);
-        return;
+      if (vaultBalance < this.config.harvest.threshold_miko * 1e9) {
+        // Need to harvest new fees
+        logger.info('Harvesting new fees');
+        
+        // Step 1: Harvest fees
+        const harvestResult = await this.feeHarvester.harvest();
+        if (!harvestResult.success && harvestResult.accountsProcessed > 0) {
+          logger.error('Harvest failed', harvestResult);
+          return;
+        }
+        
+        // Step 2: Withdraw from mint
+        const withdrawResult = await this.feeHarvester.withdrawFromMint();
+        if (!withdrawResult.success && withdrawResult.amount === 0) {
+          logger.error('Withdraw failed', withdrawResult);
+          return;
+        }
+        
+        amountToProcess = withdrawResult.amount;
       }
       
       // Step 3: Swap and distribute
@@ -209,7 +225,7 @@ class Phase4BKeeperBot {
                           new PublicKey('So11111111111111111111111111111111111111112');
       
       const swapPlan = await this.swapManager.createSwapPlan(
-        withdrawResult.amount,  // Use the actual withdrawn amount
+        amountToProcess,
         rewardToken,
         keeperBalance
       );
@@ -338,17 +354,17 @@ async function main() {
 }
 
 // Run if executed directly
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+// import { fileURLToPath } from 'url';
+// import { dirname } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = dirname(__filename);
 
 // Check if this file is being run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(error => {
     logger.error('Fatal error:', error instanceof Error ? error.message : String(error));
     console.error('Full error:', error);
     process.exit(1);
   });
-}
+// }

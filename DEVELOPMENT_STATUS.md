@@ -5,7 +5,7 @@
 **Current Phase**: Phase 4-B - Local Mainnet-Fork Testing  
 **Started**: 2025-07-15  
 **Current Date**: 2025-07-24  
-**Status**: Phase 1-3 complete ✅, Phase 4-A complete ✅, Phase 4-B keeper bot implementation in progress
+**Status**: Phase 1-3 complete ✅, Phase 4-A complete ✅, Phase 4-B BLOCKED by critical design flaws 🚫
 
 ## Current Program Addresses
 
@@ -127,9 +127,9 @@
 - [x] Implement Jupiter adapter for tax swaps ✅
 - [x] Implement mock Birdeye adapter for holder eligibility ✅
 - [x] Implement distribution engine with rollover support ✅
-- [ ] Test tax collection with swap script
-- [ ] Test harvest → withdraw → distribute cycle
-- [ ] Generate VC:4.LOCAL_FORK_PASS verification
+- [ ] Test tax collection with swap script (WITH 10 MIKO CAP LIMITATION)
+- [ ] Test harvest → withdraw → distribute cycle (ACCEPTING TAX LOSSES)
+- [ ] Generate VC:4.LOCAL_FORK_PASS verification (WITH KNOWN LIMITATIONS)
 
 ### Phase 5: Integration Testing ⏳ NOT STARTED
 - [ ] Pre-launch testing
@@ -272,39 +272,170 @@ No real SOL consumption - using local test validator
 - **Keeper Top-up**: Automatically uses up to 20% of tax when keeper < 0.05 SOL
 
 ### Immediate Next Steps
-1. **Run swap test to generate fees** (PRIORITY)
-   - Execute swap-test.ts with 20 wallets
-   - Generate 500k+ MIKO in tax fees
-   - Verify fees accumulate in withheld accounts
-   ```bash
-   cd scripts/phase4b
-   npx tsx swap-test.ts
-   ```
 
-2. **Test harvest → swap → distribute cycle**
-   - Run keeper bot to detect threshold
-   - Execute 3-step harvest flow
-   - Test tax flow scenarios with keeper top-up
-   - Verify distribution or rollover
-   ```bash
-   cd scripts/phase4b/phase4b-keeper
-   npx tsx keeper-bot-phase4b.ts
-   ```
+**Phase 4-B Diagnostic Results (2025-07-26)**:
+- ✅ Found critical issues during testing
+- ✅ Swap test generated 2.7M MIKO fees
+- ✅ Harvest and swap executed 
+- ❌ Distribution failed (keypair mismatch between modules)
+- ❌ Multiple architecture flaws discovered
 
-3. **Integration testing scenarios**
-   - Test with keeper balance < 0.05 SOL
-   - Test with no eligible holders (rollover)
-   - Test with different reward tokens
-   - Test batch distribution
+**Required Actions**:
+1. Fix all discovered issues (see Issues 1-4 below)
+2. Redesign deployment with proper architecture
+3. Redo all tests after fixes are implemented
 
-4. **Generate VC:4.LOCAL_FORK_PASS**
-   - Document all test results
-   - Verify all keeper operations work
-   - Create verification report
+## 🚫 CRITICAL DESIGN FLAWS DISCOVERED (2025-07-26)
 
-5. **Fix launch coordinator** (after keeper bot testing)
-   - Address 2-minute timeout limitation
-   - Create fresh token for complete launch test
+**IMPORTANT**: Phase 4-B diagnostic testing completed. Multiple critical issues found. All components require fixes before production use.
+
+### Issue 1: Token-2022 Transfer Fee Timing Constraints
+**Problem**: Transfer fee changes only take effect in the NEXT epoch, not immediately  
+**Impact**: Dynamic fee transitions (30% → 15% → 5% every 5 minutes) are IMPOSSIBLE  
+**Current State**:
+- Current epoch: 556 (with 30% fee and 10 MIKO maximum cap)
+- New epoch: 557 (with 5% fee and unlimited maximum) - starts in ~812 minutes
+- Fee already finalized in vault, no updates allowed
+
+**Root Causes**:
+1. Token created with 30% initial fee and 10 MIKO maximum cap
+2. Token-2022 protocol limitation: fee changes require epoch transition
+3. Maximum fee cap of 10 MIKO limiting all transfers to 10 MIKO fee max
+
+**Solution (TO BE IMPLEMENTED AFTER KEEPER BOT TESTING)**:
+- Abandon dynamic fee transitions completely
+- Create new token with fixed 5% fee from the start
+- Set maximum fee to u64::MAX (unlimited) during token creation
+- Keep fee constant throughout entire token lifecycle
+
+### Issue 2: Transfer Fee Exemption Architecture Flaws
+**Problem**: Critical accounts are being taxed during normal operations  
+**Impact**: Pool operations and keeper bot swaps will lose funds to unnecessary taxes  
+
+**Specific Issues Identified**:
+
+#### 2.1 Pool Liquidity Operations Taxed
+- Pool vault account charged 10 MIKO during liquidity additions
+- Only deployer is exempt, but pool vault is not
+- Affects all liquidity add/remove operations
+
+#### 2.2 Keeper Bot Swap Taxation
+- Keeper bot swaps (MIKO → SOL → reward tokens) will be taxed
+- Jupiter router accounts not exempted
+- Tax flow: MIKO → CPMM pool → SOL → reward token
+- Critical: Our CPMM pool will be primary liquidity source
+
+#### 2.3 Dynamic Pool Exclusions Needed
+- Current exclusions are hardcoded (deployer, owner, programs)
+- New pools created by community will hold MIKO
+- Must exclude ALL pool vaults from reward distributions
+- Cannot hardcode dynamic pool addresses
+
+**Solutions (TO BE IMPLEMENTED AFTER KEEPER BOT TESTING)**:
+1. Implement dynamic exemption logic for pool operations
+2. Create Jupiter router swap exemption mechanism
+3. Build automatic pool detection for reward exclusions
+4. Design flexible exemption system for future integrations
+
+### Current Testing Approach
+**Despite these limitations, keeper bot testing will proceed to validate:**
+1. Harvest logic (with 10 MIKO fee cap limitation)
+2. Swap logic (accepting that swaps will be taxed)
+3. Distribution logic (with manual pool exclusions)
+4. Overall keeper bot flow and timing
+
+**Testing Constraints**:
+- Maximum 10 MIKO fee per transaction due to cap
+- Keeper swaps will lose 10 MIKO per swap to taxes
+- Pool operations will continue to be taxed
+- Manual workarounds may be needed for testing
+
+### Issue 3: Vault Authority Initialization Error
+**Problem**: Vault was initialized with deployer as keeper_authority instead of separate keeper keypair  
+**Impact**: Keeper bot cannot perform its operations without using deployer's private key  
+**Current State**: Using deployer keypair in keeper bot as TEMPORARY WORKAROUND  
+
+**What Happened**:
+1. During vault initialization, the deployer keypair was used for BOTH:
+   - `authority` (admin control - correct)
+   - `keeper_authority` (operational control - INCORRECT)
+2. This means only the deployer can call keeper-specific functions like:
+   - `harvest_fees`
+   - `withdraw_fees_from_mint`
+   - Distribution operations
+3. The dedicated keeper keypair (phase4b-keeper-keypair.json) is now useless
+
+**Security Risk**:
+- Deployer keypair contains full admin privileges
+- Using it in automated keeper bot is a MAJOR security vulnerability
+- If keeper bot is compromised, attacker gets admin control
+- Proper separation of concerns violated
+
+**Temporary Workaround (TESTING ONLY)**:
+```typescript
+// CRITICAL BUG: Vault was initialized with deployer as keeper_authority
+// This SHOULD have been the keeper keypair from phase4b-keeper-keypair.json
+// Using deployer keypair here is ONLY FOR TESTING - this is a SECURITY RISK
+// TODO: Fix vault initialization to properly separate authorities:
+//   - authority: deployer (admin control)
+//   - keeper_authority: keeper keypair (operational control)
+const deployerData = JSON.parse(fs.readFileSync('../phase4b-deployer.json', 'utf-8'));
+this.keeper = Keypair.fromSecretKey(new Uint8Array(deployerData));
+```
+
+**Proper Authority Structure (TO BE IMPLEMENTED)**:
+- `authority`: Deployer/Admin keypair - for program upgrades, emergency functions
+- `keeper_authority`: Dedicated keeper keypair - for automated operations only
+- Clear separation prevents single point of failure
+
+### Issue 4: Module Keypair Inconsistency
+**Problem**: Different keeper bot modules use different keypairs  
+**Impact**: Swapped rewards go to one wallet, distribution attempts from another  
+**Current State**: SwapManager uses deployer, DistributionEngine uses keeper  
+
+**What Happened**:
+1. SwapManager was updated to use deployer keypair (due to Issue 3)
+2. DistributionEngine still used original keeper keypair
+3. Result: Swapped SOL went to deployer, distribution tried from keeper
+4. Distribution failed - keeper had 0.028 SOL, needed 0.037 SOL
+
+**Solution (TO BE IMPLEMENTED)**:
+- Ensure ALL modules use the same operational keypair
+- Single source of truth for keypair loading
+- Proper configuration management
+
+### Post-Testing Resolution Plan
+
+#### Phase 1: Fix Critical Issues (NEXT)
+- Update all modules to use consistent keypair
+- Implement proper authority separation
+- Add dynamic pool detection
+- Fix all architectural flaws
+
+#### Phase 2: Redesign Token Architecture
+1. Create new token mint with:
+   - Fixed 5% transfer fee (no transitions)
+   - Maximum fee set to u64::MAX (no cap)
+   - Proper initial exemption list
+2. Update vault program to remove fee transition logic
+3. Simplify launch coordinator (no fee monitoring needed)
+
+#### Phase 3: Implement Dynamic Exemptions (AFTER TESTING)
+1. Add pool vault exemption logic to vault program
+2. Create keeper swap exemption mechanism
+3. Build pool detection system for distributions
+4. Test all exemption scenarios
+
+#### Phase 4: Fix Authority Structure (AFTER TESTING)
+1. Update vault initialization to accept separate keeper authority
+2. Re-initialize vault with proper authority separation
+3. Update keeper bot to use dedicated keeper keypair
+4. Test all keeper operations with correct permissions
+
+#### Phase 5: Final Integration (AFTER TESTING)
+1. Deploy redesigned architecture
+2. Full end-to-end testing with fixed design
+3. Production deployment preparation
 
 ## Key Architecture Decisions
 

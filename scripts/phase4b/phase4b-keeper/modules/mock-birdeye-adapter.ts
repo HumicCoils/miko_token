@@ -37,7 +37,7 @@ export interface EligibleHoldersResult {
 
 export class MockBirdeyeAdapter {
   private connection: Connection;
-  private mockPriceUsd = 0.0001; // MOCK PRICE - NOT REAL
+  private mockPriceUsd = 0.01; // MOCK PRICE $0.01 - Holders need 10,000 MIKO for $100
   
   constructor(connection: Connection) {
     this.connection = connection;
@@ -57,7 +57,7 @@ export class MockBirdeyeAdapter {
   }
   
   /**
-   * MOCK: Scans known addresses from deployment
+   * MOCK: Scans ALL token accounts on blockchain
    * Real implementation would use Birdeye API to get all holders
    */
   async getEligibleHolders(
@@ -66,68 +66,79 @@ export class MockBirdeyeAdapter {
   ): Promise<EligibleHoldersResult> {
     try {
       const tokenPrice = this.mockPriceUsd;
-      const minTokenAmount = MIN_HOLDER_VALUE_USD / tokenPrice; // 1,000,000 MIKO at $0.0001
+      const minTokenAmount = MIN_HOLDER_VALUE_USD / tokenPrice; // 10,000 MIKO at $0.01
       
-      logger.info('MOCK: Fetching holders from known addresses', {
+      logger.info('MOCK: Fetching ALL token holders from blockchain', {
         tokenPrice,
         minValueUsd: MIN_HOLDER_VALUE_USD,
         minTokenAmount: minTokenAmount / 1e9,
-        note: 'Using hardcoded addresses - not comprehensive'
       });
       
-      // Known addresses from phase4b deployment
-      const knownAddresses = [
-        'CDTSFkBB1TuRw7WFZj4ZQpagwBhw5iURjC13kS6hEgSc', // Deployer
-        'D24rokM1eAxWAU9MQYuXK9QK4jnT1qJ23VP4dCqaw5uh', // Owner  
-        '6LTnRkPHh27xTgpfkzibe7XcUSGe3kVazvweei1D3syn', // Keeper
-        // Test wallet addresses would be added here after swap test
-      ];
+      // Get ALL token accounts for this mint
+      const accounts = await this.connection.getProgramAccounts(
+        TOKEN_2022_PROGRAM_ID,
+        {
+          filters: [
+            {
+              memcmp: {
+                offset: 0,
+                bytes: tokenMint.toBase58(),
+              },
+            },
+          ],
+        }
+      );
       
       const excludeSet = new Set(excludeAddresses.map(addr => addr.toBase58()));
       const holders: HolderInfo[] = [];
       let totalHolders = 0;
       
-      for (const address of knownAddresses) {
-        if (excludeSet.has(address)) {
-          logger.debug(`Skipping excluded address: ${address}`);
-          continue;
-        }
-        
+      // Process each token account
+      for (const { pubkey: accountPubkey, account } of accounts) {
         try {
-          const pubkey = new PublicKey(address);
-          const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(
-            pubkey,
-            { mint: tokenMint }
+          // Parse token account to get owner and balance
+          const { getAccount } = await import('@solana/spl-token');
+          const tokenAccount = await getAccount(
+            this.connection,
+            accountPubkey,
+            'confirmed',
+            TOKEN_2022_PROGRAM_ID
           );
           
-          for (const account of tokenAccounts.value) {
-            const balance = account.account.data.parsed.info.tokenAmount.uiAmount;
-            if (balance > 0) {
-              totalHolders++;
-              const valueUsd = balance * tokenPrice;
-              
-              logger.debug(`Holder ${address}: ${balance} MIKO = $${valueUsd}`);
-              
-              if (valueUsd >= MIN_HOLDER_VALUE_USD) {
-                holders.push({
-                  address,
-                  amount: balance * 1e9, // Convert to lamports
-                  valueUsd,
-                  percentOfSupply: (balance / 1_000_000_000) * 100,
-                });
-                logger.info(`ELIGIBLE holder found: ${address} with $${valueUsd} worth`);
-              } else {
-                logger.info(`Holder below threshold: ${address} has only $${valueUsd}`);
-              }
+          const owner = tokenAccount.owner.toBase58();
+          const balance = Number(tokenAccount.amount) / 1e9;
+          
+          if (balance > 0) {
+            totalHolders++;
+            
+            if (excludeSet.has(owner)) {
+              logger.debug(`Skipping excluded address: ${owner}`);
+              continue;
+            }
+            
+            const valueUsd = balance * tokenPrice;
+            
+            logger.debug(`Holder ${owner}: ${balance} MIKO = $${valueUsd}`);
+            
+            if (valueUsd >= MIN_HOLDER_VALUE_USD) {
+              holders.push({
+                address: owner,
+                amount: balance * 1e9, // Convert back to lamports
+                valueUsd,
+                percentOfSupply: (balance / 1_000_000_000) * 100,
+              });
+              logger.info(`ELIGIBLE holder found: ${owner} with $${valueUsd} worth`);
+            } else {
+              logger.info(`Holder below threshold: ${owner} has only $${valueUsd}`);
             }
           }
         } catch (error) {
-          logger.debug(`Failed to check address ${address}`, { error });
+          logger.debug(`Failed to parse account ${accountPubkey.toBase58()}`, { error });
         }
       }
       
-      logger.warn('MOCK RESULT: Only checking known addresses, not all holders', {
-        checkedAddresses: knownAddresses.length,
+      logger.warn('MOCK RESULT: Scanned all token accounts on blockchain', {
+        totalAccounts: accounts.length,
         totalHolders,
         eligibleHolders: holders.length,
       });

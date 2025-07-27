@@ -1,13 +1,13 @@
 import { PublicKey, Keypair } from '@solana/web3.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+// import { fileURLToPath } from 'url';
+// import { dirname } from 'path';
 import { ConfigManager } from '../../config-manager';
 import { createLogger } from '../utils/logger';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = dirname(__filename);
 
 export interface Phase4BConfig {
   network: {
@@ -57,11 +57,11 @@ export class Phase4BConfigLoader {
 
     try {
       // Use ConfigManager to get auto-derived configuration
-      const configManager = new ConfigManager(path.join(__dirname, '../../minimal-config.json'));
+      const configManager = new ConfigManager(path.join(process.cwd(), '../minimal-config.json'));
       const autoConfig = await configManager.getFullConfig();
       
       // Load keeper keypair info
-      const keeperKeypairPath = path.join(__dirname, '..', 'phase4b-keeper-keypair.json');
+      const keeperKeypairPath = path.join(process.cwd(), 'phase4b-keeper-keypair.json');
       const keeperKeypairData = JSON.parse(fs.readFileSync(keeperKeypairPath, 'utf-8'));
       const keeperKeypair = Keypair.fromSecretKey(new Uint8Array(keeperKeypairData));
       const keeperPubkey = keeperKeypair.publicKey;

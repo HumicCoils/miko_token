@@ -10,9 +10,11 @@ import {
   NATIVE_MINT
 } from '@solana/spl-token';
 import { Raydium, TxVersion, CurveCalculator } from '@raydium-io/raydium-sdk-v2';
-import { BN } from '@coral-xyz/anchor';
+import BN from 'bn.js';
 import * as fs from 'fs';
 import { ConfigManager } from './config-manager';
+import axios from 'axios';
+import { VersionedTransaction } from '@solana/web3.js';
 
 interface TestWallet {
   keypair: Keypair;
@@ -172,131 +174,196 @@ async function createSwapTest() {
       
       console.log(`Wallet ${wallet.index}: ${swapDirection} ${swapAmount.toFixed(4)} ${swapDirection === SwapDirection.SOL_TO_MIKO ? 'SOL' : 'MIKO'} on ${dex}`);
       
-      // Execute real swap using Raydium
+      // Execute real swap using selected DEX
       try {
-        // Create Raydium instance for this wallet
-        const walletRaydium = await Raydium.load({
-          connection,
-          owner: wallet.keypair,
-          cluster: 'mainnet',
-          disableFeatureCheck: true,
-          disableLoadToken: true,
-          blockhashCommitment: 'confirmed',
-        });
+        let swapTxId: string;
         
-        if (swapDirection === SwapDirection.SOL_TO_MIKO) {
-          // Create WSOL account and wrap SOL
-          const wsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, wallet.keypair.publicKey);
-          const wsolAccountInfo = await connection.getAccountInfo(wsolAta);
+        if (dex === DEX.JUPITER) {
+          // Execute swap using Jupiter API
+          const inputMint = swapDirection === SwapDirection.SOL_TO_MIKO 
+            ? 'So11111111111111111111111111111111111111112'
+            : mikoMint.toBase58();
+          const outputMint = swapDirection === SwapDirection.SOL_TO_MIKO 
+            ? mikoMint.toBase58()
+            : 'So11111111111111111111111111111111111111112';
+          const amount = Math.floor(swapAmount * 1e9).toString();
           
-          const tx = new Transaction();
-          if (!wsolAccountInfo) {
-            tx.add(createAssociatedTokenAccountInstruction(
-              wallet.keypair.publicKey,
-              wsolAta,
-              wallet.keypair.publicKey,
-              NATIVE_MINT
-            ));
+          // Get quote from Jupiter
+          console.log(`    Getting Jupiter quote...`);
+          const quoteResponse = await axios.get('https://quote-api.jup.ag/v6/quote', {
+            params: {
+              inputMint,
+              outputMint,
+              amount,
+              slippageBps: '100', // 1%
+              onlyDirectRoutes: 'false',
+              asLegacyTransaction: 'false',
+            }
+          });
+          
+          if (!quoteResponse.data) {
+            throw new Error('No quote received from Jupiter');
           }
           
-          // Transfer SOL to WSOL account
-          tx.add(SystemProgram.transfer({
-            fromPubkey: wallet.keypair.publicKey,
-            toPubkey: wsolAta,
-            lamports: Math.floor(swapAmount * 1e9),
-          }));
+          const quote = quoteResponse.data;
+          console.log(`    Quote: ${parseInt(quote.inAmount) / 1e9} → ${parseInt(quote.outAmount) / 1e9}`);
           
-          // Sync native account
-          tx.add(createSyncNativeInstruction(wsolAta));
-          
-          await sendAndConfirmTransaction(connection, tx, [wallet.keypair]);
-          
-          // Now swap WSOL to MIKO using Raydium
-          const inputAmount = new BN(Math.floor(swapAmount * 1e9));
-          
-          // Check if WSOL is mintA (baseIn = true) or mintB (baseIn = false)
-          const baseIn = poolInfo.mintA.address === NATIVE_MINT.toBase58();
-          
-          // Calculate swap output
-          const swapResult = CurveCalculator.swap(
-            inputAmount,
-            baseIn ? poolData.rpcData.baseReserve : poolData.rpcData.quoteReserve,
-            baseIn ? poolData.rpcData.quoteReserve : poolData.rpcData.baseReserve,
-            poolData.rpcData.configInfo!.tradeFeeRate
-          );
-          
-          const { execute, transaction } = await walletRaydium.cpmm.swap({
-            poolInfo: poolData.poolInfo,
-            poolKeys: poolData.poolKeys,
-            txVersion: TxVersion.LEGACY,
-            baseIn,
-            inputAmount,
-            swapResult,
-            slippage: 0.1, // 10%
+          // Get swap transaction
+          const swapResponse = await axios.post('https://quote-api.jup.ag/v6/swap', {
+            quoteResponse: quote,
+            userPublicKey: wallet.keypair.publicKey.toBase58(),
+            wrapAndUnwrapSol: true,
+            asLegacyTransaction: false,
+            prioritizationFeeLamports: 'auto',
+            dynamicComputeUnitLimit: true,
           });
           
-          // Log transaction details to debug
-          console.log(`    Transaction has ${(transaction as Transaction).instructions.length} instructions`);
-          console.log(`    Input amount: ${inputAmount.toString()}`);
-          console.log(`    Swap result:`, swapResult);
+          if (!swapResponse.data || !swapResponse.data.swapTransaction) {
+            throw new Error('No swap transaction received from Jupiter');
+          }
           
-          // Execute directly or use transaction
-          const swapTxId = await sendAndConfirmTransaction(
-            connection,
-            transaction as Transaction,
-            [wallet.keypair],
-            { commitment: 'confirmed' }
-          );
+          // Deserialize and sign transaction
+          const swapTransactionBuf = Buffer.from(swapResponse.data.swapTransaction, 'base64');
+          const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+          transaction.sign([wallet.keypair]);
           
+          // Execute transaction
+          const rawTransaction = transaction.serialize();
+          swapTxId = await connection.sendRawTransaction(rawTransaction, {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+          });
+          
+          // Wait for confirmation
+          await connection.confirmTransaction(swapTxId, 'confirmed');
           console.log(`    Swap tx: ${swapTxId.substring(0, 16)}...`);
-          
-          // Close WSOL account to reclaim rent
-          const closeTx = new Transaction();
-          closeTx.add(createCloseAccountInstruction(
-            wsolAta,
-            wallet.keypair.publicKey,
-            wallet.keypair.publicKey
-          ));
-          await sendAndConfirmTransaction(connection, closeTx, [wallet.keypair]);
           
         } else {
-          // Swap MIKO to SOL
-          const inputAmount = new BN(Math.floor(swapAmount * 1e9));
-          
-          // MIKO is mintB, so baseIn = false when swapping MIKO
-          const baseIn = false;
-          
-          // Calculate swap output
-          const swapResult = CurveCalculator.swap(
-            inputAmount,
-            baseIn ? poolData.rpcData.baseReserve : poolData.rpcData.quoteReserve,
-            baseIn ? poolData.rpcData.quoteReserve : poolData.rpcData.baseReserve,
-            poolData.rpcData.configInfo!.tradeFeeRate
-          );
-          
-          const { execute, transaction } = await walletRaydium.cpmm.swap({
-            poolInfo: poolData.poolInfo,
-            poolKeys: poolData.poolKeys,
-            txVersion: TxVersion.LEGACY,
-            baseIn,
-            inputAmount,
-            swapResult,
-            slippage: 0.1, // 10%
+          // Use Raydium for swap
+          // Create Raydium instance for this wallet
+          const walletRaydium = await Raydium.load({
+            connection,
+            owner: wallet.keypair,
+            cluster: 'mainnet',
+            disableFeatureCheck: true,
+            disableLoadToken: true,
+            blockhashCommitment: 'confirmed',
           });
           
-          // Log transaction details to debug
-          console.log(`    Transaction has ${(transaction as Transaction).instructions.length} instructions`);
-          console.log(`    Input amount: ${inputAmount.toString()}`);
-          console.log(`    Swap result:`, swapResult);
-          
-          const swapTxId = await sendAndConfirmTransaction(
-            connection,
-            transaction as Transaction,
-            [wallet.keypair],
-            { commitment: 'confirmed' }
-          );
-          
-          console.log(`    Swap tx: ${swapTxId.substring(0, 16)}...`);
+          if (swapDirection === SwapDirection.SOL_TO_MIKO) {
+            // Create WSOL account and wrap SOL
+            const wsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, wallet.keypair.publicKey);
+            const wsolAccountInfo = await connection.getAccountInfo(wsolAta);
+            
+            const tx = new Transaction();
+            if (!wsolAccountInfo) {
+              tx.add(createAssociatedTokenAccountInstruction(
+                wallet.keypair.publicKey,
+                wsolAta,
+                wallet.keypair.publicKey,
+                NATIVE_MINT
+              ));
+            }
+            
+            // Transfer SOL to WSOL account
+            tx.add(SystemProgram.transfer({
+              fromPubkey: wallet.keypair.publicKey,
+              toPubkey: wsolAta,
+              lamports: Math.floor(swapAmount * 1e9),
+            }));
+            
+            // Sync native account
+            tx.add(createSyncNativeInstruction(wsolAta));
+            
+            await sendAndConfirmTransaction(connection, tx, [wallet.keypair]);
+            
+            // Now swap WSOL to MIKO using Raydium
+            const inputAmount = new BN(Math.floor(swapAmount * 1e9));
+            
+            // Check if WSOL is mintA (baseIn = true) or mintB (baseIn = false)
+            const baseIn = poolInfo.mintA.address === NATIVE_MINT.toBase58();
+            
+            // Calculate swap output
+            const swapResult = CurveCalculator.swap(
+              inputAmount,
+              baseIn ? poolData.rpcData.baseReserve : poolData.rpcData.quoteReserve,
+              baseIn ? poolData.rpcData.quoteReserve : poolData.rpcData.baseReserve,
+              poolData.rpcData.configInfo!.tradeFeeRate
+            );
+            
+            const { execute, transaction } = await walletRaydium.cpmm.swap({
+              poolInfo: poolData.poolInfo,
+              poolKeys: poolData.poolKeys,
+              txVersion: TxVersion.LEGACY,
+              baseIn,
+              inputAmount,
+              swapResult,
+              slippage: 0.1, // 10%
+            });
+            
+            // Log transaction details to debug
+            console.log(`    Transaction has ${(transaction as Transaction).instructions.length} instructions`);
+            console.log(`    Input amount: ${inputAmount.toString()}`);
+            console.log(`    Swap result:`, swapResult);
+            
+            // Execute directly or use transaction
+            swapTxId = await sendAndConfirmTransaction(
+              connection,
+              transaction as Transaction,
+              [wallet.keypair],
+              { commitment: 'confirmed' }
+            );
+            
+            console.log(`    Swap tx: ${swapTxId.substring(0, 16)}...`);
+            
+            // Close WSOL account to reclaim rent
+            const closeTx = new Transaction();
+            closeTx.add(createCloseAccountInstruction(
+              wsolAta,
+              wallet.keypair.publicKey,
+              wallet.keypair.publicKey
+            ));
+            await sendAndConfirmTransaction(connection, closeTx, [wallet.keypair]);
+            
+          } else {
+            // Swap MIKO to SOL
+            const inputAmount = new BN(Math.floor(swapAmount * 1e9));
+            
+            // MIKO is mintB, so baseIn = false when swapping MIKO
+            const baseIn = false;
+            
+            // Calculate swap output
+            const swapResult = CurveCalculator.swap(
+              inputAmount,
+              baseIn ? poolData.rpcData.baseReserve : poolData.rpcData.quoteReserve,
+              baseIn ? poolData.rpcData.quoteReserve : poolData.rpcData.baseReserve,
+              poolData.rpcData.configInfo!.tradeFeeRate
+            );
+            
+            const { execute, transaction } = await walletRaydium.cpmm.swap({
+              poolInfo: poolData.poolInfo,
+              poolKeys: poolData.poolKeys,
+              txVersion: TxVersion.LEGACY,
+              baseIn,
+              inputAmount,
+              swapResult,
+              slippage: 0.1, // 10%
+            });
+            
+            // Log transaction details to debug
+            console.log(`    Transaction has ${(transaction as Transaction).instructions.length} instructions`);
+            console.log(`    Input amount: ${inputAmount.toString()}`);
+            console.log(`    Swap result:`, swapResult);
+            
+            swapTxId = await sendAndConfirmTransaction(
+              connection,
+              transaction as Transaction,
+              [wallet.keypair],
+              { commitment: 'confirmed' }
+            );
+            
+            console.log(`    Swap tx: ${swapTxId.substring(0, 16)}...`);
+          }
         }
         
         // Update wallet balances

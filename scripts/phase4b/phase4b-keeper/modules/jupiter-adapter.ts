@@ -1,7 +1,10 @@
-import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
-import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
+import { Connection, PublicKey, Keypair, VersionedTransaction, Transaction, sendAndConfirmTransaction, SystemProgram } from '@solana/web3.js';
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction, createSyncNativeInstruction, createCloseAccountInstruction, getAccount } from '@solana/spl-token';
 import { createLogger } from '../utils/logger';
 import axios from 'axios';
+import { Raydium, TxVersion, CurveCalculator } from '@raydium-io/raydium-sdk-v2';
+import BN from 'bn.js';
+import * as fs from 'fs';
 
 const logger = createLogger('JupiterAdapter');
 
@@ -30,11 +33,14 @@ export interface JupiterSwapResult {
 export class JupiterAdapter {
   private connection: Connection;
   private isMainnetFork: boolean;
+  private raydium: Raydium | null = null;
+  private poolId: PublicKey | null = null;
   
-  constructor(connection: Connection) {
+  constructor(connection: Connection, poolId?: PublicKey) {
     this.connection = connection;
     // Determine if we're on mainnet fork based on RPC URL
     this.isMainnetFork = !connection.rpcEndpoint.includes('devnet');
+    this.poolId = poolId || null;
   }
   
   async getQuote(
@@ -144,12 +150,9 @@ export class JupiterAdapter {
     const quote = await this.getQuote(mikoMint, solMint, amount, slippageBps);
     
     if (!quote) {
-      return {
-        success: false,
-        inputAmount: amount,
-        outputAmount: 0,
-        error: 'Failed to get swap quote',
-      };
+      // Fallback to Raydium for local fork
+      logger.info('Jupiter quote failed, falling back to Raydium CPMM');
+      return await this.raydiumSwapMikoToSol(owner, mikoMint, amount, slippageBps);
     }
     
     logger.info('Quote received', {
@@ -207,6 +210,96 @@ export class JupiterAdapter {
     } catch (error) {
       logger.error('Failed to check token support', { error });
       return false;
+    }
+  }
+  
+  // Raydium fallback methods for local fork
+  private async ensureRaydiumInitialized(owner: Keypair): Promise<Raydium> {
+    if (!this.raydium) {
+      this.raydium = await Raydium.load({
+        connection: this.connection,
+        owner,
+        disableLoadToken: true,
+      });
+    }
+    return this.raydium;
+  }
+  
+  private async raydiumSwapMikoToSol(
+    owner: Keypair,
+    mikoMint: PublicKey,
+    amount: number,
+    slippageBps: number = 100
+  ): Promise<JupiterSwapResult> {
+    try {
+      if (!this.poolId) {
+        throw new Error('Pool ID not provided to JupiterAdapter');
+      }
+      
+      logger.info('Executing MIKO -> SOL swap on Raydium CPMM', {
+        poolId: this.poolId.toBase58(),
+        amount: amount / 1e9
+      });
+      
+      const raydium = await this.ensureRaydiumInitialized(owner);
+      
+      // Get pool data
+      const poolData = await raydium.cpmm.getPoolInfoFromRpc(this.poolId.toBase58());
+      if (!poolData) {
+        throw new Error('Pool not found');
+      }
+      
+      // MIKO is mintB, so baseIn = false when swapping MIKO
+      const baseIn = false;
+      const inputAmount = new BN(amount);
+      
+      // Calculate swap output
+      const swapResult = CurveCalculator.swap(
+        inputAmount,
+        baseIn ? poolData.rpcData.baseReserve : poolData.rpcData.quoteReserve,
+        baseIn ? poolData.rpcData.quoteReserve : poolData.rpcData.baseReserve,
+        poolData.rpcData.configInfo!.tradeFeeRate
+      );
+      
+      // Create swap transaction
+      const { execute, transaction } = await raydium.cpmm.swap({
+        poolInfo: poolData.poolInfo,
+        poolKeys: poolData.poolKeys,
+        txVersion: TxVersion.LEGACY,
+        baseIn,
+        inputAmount,
+        swapResult,
+        slippage: 0.5, // 50% slippage for keeper swaps to ensure success
+      });
+      
+      // Send transaction
+      const tx = await sendAndConfirmTransaction(
+        this.connection,
+        transaction as Transaction,
+        [owner],
+        { commitment: 'confirmed' }
+      );
+      
+      logger.info('Raydium swap successful', {
+        txSignature: tx,
+        outputAmount: swapResult.destinationAmountSwapped.toNumber() / 1e9
+      });
+      
+      return {
+        success: true,
+        txSignature: tx,
+        inputAmount: amount,
+        outputAmount: swapResult.destinationAmountSwapped.toNumber(),
+      };
+      
+    } catch (error) {
+      logger.error('Raydium swap failed', { error });
+      return {
+        success: false,
+        inputAmount: amount,
+        outputAmount: 0,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
   }
 }

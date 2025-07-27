@@ -1,4 +1,5 @@
 import { Connection, PublicKey, Transaction, TransactionInstruction, Keypair } from '@solana/web3.js';
+import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { createLogger } from '../utils/logger';
 import { Phase4BConfig } from '../config/config';
 import { HarvestImpl } from './harvest-impl';
@@ -34,7 +35,12 @@ export class FeeHarvester {
     this.connection = connection;
     this.config = config;
     
-    // Load keeper keypair
+    // CRITICAL BUG: Vault was initialized with deployer as keeper_authority
+    // This SHOULD have been the keeper keypair from phase4b-keeper-keypair.json
+    // Using deployer keypair here is ONLY FOR TESTING - this is a SECURITY RISK
+    // TODO: Fix vault initialization to properly separate authorities:
+    //   - authority: deployer (admin control)
+    //   - keeper_authority: keeper keypair (operational control)
     const deployerData = JSON.parse(fs.readFileSync('../phase4b-deployer.json', 'utf-8'));
     this.keeper = Keypair.fromSecretKey(new Uint8Array(deployerData));
     
@@ -57,12 +63,28 @@ export class FeeHarvester {
     try {
       const threshold = this.config.harvest.threshold_miko * Math.pow(10, this.config.token.decimals);
       
-      // Get actual accumulated fees from on-chain
+      // Check vault balance first - if already has funds, process them
+      const vaultBalance = await this.harvestImpl.getVaultTokenBalance();
+      if (vaultBalance >= threshold) {
+        logger.info(`Vault already has ${vaultBalance / 1e9} MIKO, proceeding with swaps`);
+        return true;
+      }
+      
+      // Otherwise check if new fees need harvesting
       const { totalFees } = await this.harvestImpl.getAccumulatedFees();
       
-      logger.debug(`Current fees: ${totalFees}, Threshold: ${threshold}`);
+      // Also check mint's withheld amount
+      const { getMint, getTransferFeeConfig } = await import('@solana/spl-token');
+      const mintPubkey = new PublicKey(this.config.token.mint_address);
+      const mintInfo = await getMint(this.connection, mintPubkey, 'confirmed', TOKEN_2022_PROGRAM_ID);
+      const transferFeeConfig = getTransferFeeConfig(mintInfo);
+      const mintWithheld = transferFeeConfig ? Number(transferFeeConfig.withheldAmount) : 0;
       
-      return totalFees >= threshold;
+      const totalAvailable = totalFees + mintWithheld;
+      
+      logger.debug(`Account fees: ${totalFees}, Mint withheld: ${mintWithheld}, Total: ${totalAvailable}, Threshold: ${threshold}`);
+      
+      return totalAvailable >= threshold;
     } catch (error) {
       logger.error('Failed to check harvest threshold', { error });
       return false;
@@ -77,7 +99,24 @@ export class FeeHarvester {
       const { totalFees, accountsWithFees } = await this.harvestImpl.getAccumulatedFees();
       
       if (accountsWithFees.length === 0) {
-        logger.warn('No accounts with fees to harvest');
+        // Check if fees are already in mint
+        const { getMint, getTransferFeeConfig } = await import('@solana/spl-token');
+        const mintPubkey = new PublicKey(this.config.token.mint_address);
+        const mintInfo = await getMint(this.connection, mintPubkey, 'confirmed', TOKEN_2022_PROGRAM_ID);
+        const transferFeeConfig = getTransferFeeConfig(mintInfo);
+        const mintWithheld = transferFeeConfig ? Number(transferFeeConfig.withheldAmount) : 0;
+        
+        if (mintWithheld > 0) {
+          logger.info(`No accounts with fees, but mint has ${mintWithheld / 1e9} MIKO withheld - skipping harvest`);
+          return {
+            success: true,
+            totalHarvested: 0,
+            accountsProcessed: 0,
+            txSignatures: [],
+          };
+        }
+        
+        logger.warn('No accounts with fees to harvest and no fees in mint');
         return {
           success: true,
           totalHarvested: 0,
@@ -138,6 +177,10 @@ export class FeeHarvester {
     }
   }
 
+  async getVaultBalance(): Promise<number> {
+    return await this.harvestImpl.getVaultTokenBalance();
+  }
+
   async getStatus(): Promise<any> {
     try {
       const { totalFees, accountsWithFees } = await this.harvestImpl.getAccumulatedFees();
@@ -148,7 +191,7 @@ export class FeeHarvester {
         accumulatedFees: totalFees,
         accountsWithFees: accountsWithFees.length,
         threshold: this.config.harvest.threshold_miko,
-        readyToHarvest: totalFees >= threshold,
+        readyToHarvest: totalFees >= threshold || vaultBalance >= threshold,
         vaultBalance: vaultBalance / Math.pow(10, this.config.token.decimals),
       };
     } catch (error) {

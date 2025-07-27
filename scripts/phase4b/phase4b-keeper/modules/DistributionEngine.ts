@@ -202,6 +202,9 @@ export class DistributionEngine {
       new PublicKey(this.config.wallets.owner_wallet), // Owner (gets separate 20%)
       this.mikoMint, // Token mint
       // Smart dial PDA would also be excluded
+      
+      // MANUAL EXCLUSION FOR TESTING - Pool vault with 719M MIKO
+      new PublicKey('GpMZbSM2dRcJqyDmE2ueBxvsrfFjqNkr5kJQxNF86VCe'),
     ];
   }
 

@@ -60,12 +60,15 @@ export class SwapManager {
     this.connection = connection;
     this.config = config;
     this.ownerWallet = new PublicKey(config.wallets.owner_wallet);
-    this.jupiterAdapter = new JupiterAdapter(connection);
+    // Pass pool ID to JupiterAdapter for Raydium fallback
+    const poolId = config.pool?.pool_id ? new PublicKey(config.pool.pool_id) : undefined;
+    this.jupiterAdapter = new JupiterAdapter(connection, poolId);
     this.mikoMint = new PublicKey(config.token.mint_address);
     
-    // Load keeper keypair for swaps
-    const keeperData = JSON.parse(fs.readFileSync('./phase4b-keeper-keypair.json', 'utf-8'));
-    this.keeper = Keypair.fromSecretKey(new Uint8Array(keeperData));
+    // CRITICAL BUG: Using deployer keypair because vault was initialized incorrectly
+    // See DEVELOPMENT_STATUS.md Issue 3 for details
+    const deployerData = JSON.parse(fs.readFileSync('../phase4b-deployer.json', 'utf-8'));
+    this.keeper = Keypair.fromSecretKey(new Uint8Array(deployerData));
   }
 
   async getKeeperBalance(): Promise<number> {
