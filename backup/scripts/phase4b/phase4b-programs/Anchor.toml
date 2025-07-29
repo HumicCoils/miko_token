@@ -1,0 +1,19 @@
+[toolchain]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+absolute_vault = "6YncMnRAwCpaUdB7RpA96AyXUi3SsCMrTCnncSxrzdMt"
+smart_dial = "CCJrRNczvCGFuUriUcSw2fN4tFHUNv1KTM1PKjBqFZey"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "localnet"
+wallet = "../phase4b-deployer.json"
+
+[scripts]
+test = "node --max-old-space-size=8192 node_modules/@coral-xyz/anchor/dist/cjs/cli/cli.js test"

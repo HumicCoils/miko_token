@@ -4,8 +4,8 @@
 **Project**: MIKO Token System  
 **Current Phase**: Phase 4-B - Local Mainnet-Fork Testing  
 **Started**: 2025-07-15  
-**Current Date**: 2025-07-24  
-**Status**: Phase 1-3 complete ✅, Phase 4-A complete ✅, Phase 4-B BLOCKED by critical design flaws 🚫
+**Current Date**: 2025-07-28  
+**Status**: Phase 1-3 complete ✅, Phase 4-A complete ✅, Phase 4-B IN PROGRESS 🔄 (critical issues found, requires fixes)
 
 ## Current Program Addresses
 
@@ -98,7 +98,7 @@
 - [x] Fixed SwapManager design flaw (MIKO tokens, not SOL)
 - [x] Fixed test vulnerabilities
 
-#### Phase 4-B: Local Mainnet-Fork Testing 🔄 IN PROGRESS
+#### Phase 4-B: Local Mainnet-Fork Testing 🔄 IN PROGRESS - REQUIRES FIXES
 - [x] Discovered mainnet program IDs
   - Raydium CPMM: `CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C`
   - Jupiter V6: `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`
@@ -127,9 +127,11 @@
 - [x] Implement Jupiter adapter for tax swaps ✅
 - [x] Implement mock Birdeye adapter for holder eligibility ✅
 - [x] Implement distribution engine with rollover support ✅
-- [ ] Test tax collection with swap script (WITH 10 MIKO CAP LIMITATION)
-- [ ] Test harvest → withdraw → distribute cycle (ACCEPTING TAX LOSSES)
-- [ ] Generate VC:4.LOCAL_FORK_PASS verification (WITH KNOWN LIMITATIONS)
+- [ ] Test tax collection with swap script ❌ FAILED - Critical issues found
+- [ ] Test harvest → withdraw → distribute cycle ❌ FAILED - Multiple failures
+- [ ] Fix all critical issues discovered
+- [ ] Redo ALL Phase 4-B tests from scratch
+- [ ] Generate VC:4.LOCAL_FORK_PASS verification ❌ NOT POSSIBLE - Must fix first
 
 ### Phase 5: Integration Testing ⏳ NOT STARTED
 - [ ] Pre-launch testing
@@ -308,47 +310,53 @@ No real SOL consumption - using local test validator
 - Set maximum fee to u64::MAX (unlimited) during token creation
 - Keep fee constant throughout entire token lifecycle
 
-### Issue 2: Transfer Fee Exemption Architecture Flaws
-**Problem**: Critical accounts are being taxed during normal operations  
-**Impact**: Pool operations and keeper bot swaps will lose funds to unnecessary taxes  
+### Issue 2: Transfer Fee Strategy Update
+**Clarification**: Transfer fee exemptions impossible, but reward distribution exclusions fully implementable  
+**Strategy**: Accept 5% transfer fee while implementing dynamic reward exclusions  
 
-**Specific Issues Identified**:
+**Key Points**:
 
-#### 2.1 Pool Liquidity Operations Taxed
-- Pool vault account charged 10 MIKO during liquidity additions
-- Only deployer is exempt, but pool vault is not
-- Affects all liquidity add/remove operations
+#### 2.1 Transfer Fees Are Universal (Protocol Level)
+- Token-2022 enforces 5% fee on ALL transfers - no exemptions possible
+- Pool operations, keeper swaps, all transfers incur 5% tax
+- This is acceptable since taxes are redistributed to owner/holders
+- Not a flaw - working as designed
 
-#### 2.2 Keeper Bot Swap Taxation
-- Keeper bot swaps (MIKO → SOL → reward tokens) will be taxed
-- Jupiter router accounts not exempted
-- Tax flow: MIKO → CPMM pool → SOL → reward token
-- Critical: Our CPMM pool will be primary liquidity source
+#### 2.2 Reward Distribution Exclusions (Application Level)
+- Vault program CAN exclude accounts from receiving distributions
+- Current exclusions are hardcoded (deployer, owner, programs, keeper)
+- Pool vaults hold significant MIKO but shouldn't receive rewards
+- Need dynamic detection during holder filtering
 
-#### 2.3 Dynamic Pool Exclusions Needed
-- Current exclusions are hardcoded (deployer, owner, programs)
-- New pools created by community will hold MIKO
-- Must exclude ALL pool vaults from reward distributions
-- Cannot hardcode dynamic pool addresses
+#### 2.3 Dynamic Exclusion Implementation
+**Current (Hardcoded)**:
+- Fee exclusions: [owner, treasury, keeper, program, vault]
+- Reward exclusions: [owner, treasury, keeper, program, vault]
 
-**Solutions (TO BE IMPLEMENTED AFTER KEEPER BOT TESTING)**:
-1. Implement dynamic exemption logic for pool operations
-2. Create Jupiter router swap exemption mechanism
-3. Build automatic pool detection for reward exclusions
-4. Design flexible exemption system for future integrations
+**Improved (Dynamic)**:
+- During holder eligibility filtering in Distribution Engine:
+  1. Query all pool accounts holding MIKO
+  2. Add pool vaults to exclusion list dynamically
+  3. Filter out excluded accounts before distribution
+  4. Distribute only to genuine holders
 
-### Current Testing Approach
-**Despite these limitations, keeper bot testing will proceed to validate:**
-1. Harvest logic (with 10 MIKO fee cap limitation)
-2. Swap logic (accepting that swaps will be taxed)
-3. Distribution logic (with manual pool exclusions)
-4. Overall keeper bot flow and timing
+**Implementation Location**: 
+- `DistributionEngine.ts` - during `getEligibleHolders()` filtering
+- Detect and exclude pool accounts before calculating distributions
 
-**Testing Constraints**:
-- Maximum 10 MIKO fee per transaction due to cap
-- Keeper swaps will lose 10 MIKO per swap to taxes
-- Pool operations will continue to be taxed
-- Manual workarounds may be needed for testing
+### Testing Results (FAILED 2025-07-28)
+**Testing revealed critical failures requiring complete redesign:**
+1. ❌ Harvest logic partially works but has 10 MIKO fee cap limitation
+2. ❌ Swap logic fails due to keypair inconsistencies
+3. ❌ Distribution logic fails - wrong keypair, insufficient funds
+4. ❌ Overall keeper bot flow BROKEN - multiple architectural flaws
+
+**Critical Issues Found During Testing**:
+- Maximum 10 MIKO fee per transaction blocks proper operation
+- Authority initialization error forces unsafe workarounds
+- Module keypair inconsistencies cause operational failures
+- Token-2022 fee timing constraints make dynamic fees impossible
+- All tests must be redone after fixing core issues
 
 ### Issue 3: Vault Authority Initialization Error
 **Problem**: Vault was initialized with deployer as keeper_authority instead of separate keeper keypair  
@@ -404,38 +412,43 @@ this.keeper = Keypair.fromSecretKey(new Uint8Array(deployerData));
 - Single source of truth for keypair loading
 - Proper configuration management
 
-### Post-Testing Resolution Plan
+### Implementation Plan (Testing Complete - Ready for Fixes)
 
-#### Phase 1: Fix Critical Issues (NEXT)
-- Update all modules to use consistent keypair
-- Implement proper authority separation
-- Add dynamic pool detection
-- Fix all architectural flaws
+#### Phase 1: Immediate Fixes Required
+- ✅ Testing completed - critical issues identified
+- [ ] Update all keeper modules to use consistent keypair
+- [ ] Implement dynamic pool detection in DistributionEngine
+- [ ] Fix authority separation in vault initialization
+- [ ] Create consistent configuration management
 
-#### Phase 2: Redesign Token Architecture
+#### Phase 2: Token Architecture Redesign
 1. Create new token mint with:
    - Fixed 5% transfer fee (no transitions)
    - Maximum fee set to u64::MAX (no cap)
-   - Proper initial exemption list
+   - Accept universal 5% tax on all operations
 2. Update vault program to remove fee transition logic
 3. Simplify launch coordinator (no fee monitoring needed)
 
-#### Phase 3: Implement Dynamic Exemptions (AFTER TESTING)
-1. Add pool vault exemption logic to vault program
-2. Create keeper swap exemption mechanism
-3. Build pool detection system for distributions
-4. Test all exemption scenarios
+#### Phase 3: Dynamic Reward Exclusion System
+1. Update DistributionEngine to detect pool accounts dynamically:
+   - Query all token accounts holding MIKO
+   - Identify pool vaults by program ownership
+   - Add to exclusion list before distribution
+2. Implement in `getEligibleHolders()` method
+3. Test dynamic detection with multiple pools
 
-#### Phase 4: Fix Authority Structure (AFTER TESTING)
-1. Update vault initialization to accept separate keeper authority
-2. Re-initialize vault with proper authority separation
-3. Update keeper bot to use dedicated keeper keypair
-4. Test all keeper operations with correct permissions
+#### Phase 4: Authority Structure Fix
+1. Update vault initialization to accept separate authorities:
+   - `authority`: Admin control (deployer)
+   - `keeper_authority`: Operational control (keeper)
+2. Re-deploy vault with proper separation
+3. Update all keeper modules to use dedicated keypair
+4. Verify keeper operations with correct permissions
 
-#### Phase 5: Final Integration (AFTER TESTING)
-1. Deploy redesigned architecture
-2. Full end-to-end testing with fixed design
-3. Production deployment preparation
+#### Phase 5: Final Integration
+1. Deploy redesigned architecture to fresh fork
+2. Complete end-to-end testing with all fixes
+3. Prepare for production deployment
 
 ## Key Architecture Decisions
 

@@ -1,6 +1,6 @@
 # VERIFICATION_GUIDE.md
 Process-First Verification Layer for MIKO Token System  
-Revision: 2025-07-17
+Revision: 2025-07-28
 
 ---
 ## 0. Context
@@ -47,27 +47,28 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 ## 3. Core VC Set
 | VC | Phase | Asserts | Block? |
 |---|---|---|---|
-| VC:2.NO_UNSUPPORTED_EXT | 2 | Mint has no Raydium-incompatible extensions | YES |
-| VC:2.FEE_RATE | 2 | Transfer fee == 3000 basis points (30%) | YES |
+| VC:2.NO_UNSUPPORTED_EXT | 2 | Mint has no incompatible extensions | YES |
+| VC:2.FEE_RATE | 2 | Transfer fee == 500 basis points (5%) | YES |
+| VC:2.MAX_FEE | 2 | Maximum fee == u64::MAX (unlimited) | YES |
 | VC:2.AUTHORITIES | 2 | All authorities set correctly before Phase 3 | YES |
 | VC:3.PDA_CALCULATION | 3 | Vault PDA matches expected derivation | YES |
 | VC:3.VAULT_EXCLUSIONS | 3 | Vault auto-exclusion arrays contain all system accounts | YES |
 | VC:3.AUTH_SYNC | 3 | Token-2022 fee/withdraw authorities -> Vault PDA | YES |
-| VC:3.TRANSFER_TEST | 3 | Standard token transfer works with 30% fee | YES |
+| VC:3.TRANSFER_TEST | 3 | Standard token transfer works with 5% fee | YES |
 | VC:4.KEEPER_PREFLIGHT | 4 | Keeper env/program reachability | YES |
 | VC:4.FIRST_MONDAY | 4 | First Monday calculation correct | YES |
 | VC:4.TAX_FLOW_LOGIC | 4 | Tax flow scenarios correctly implemented | YES |
 | VC:4.TAX_FLOW_EDGE | 4 | Mock CI tests must trigger rollback, slippage, concurrent harvest edge cases and pass recovery logic | YES |
-| VC:4.LOCAL_FORK_PASS | 4 | Full launch path succeeds on local mainnet-fork (pool, ladder, fee schedule, tax flow) | YES |
+| VC:4.DYNAMIC_EXCLUSIONS | 4-B | Pool detection and router exclusion work correctly | YES |
+| VC:4.LOCAL_FORK_PASS | 4-B | Full launch path succeeds on local mainnet-fork | YES |
 | VC:LAUNCH_LIQUIDITY | 5 | Launch Liquidity Ladder executed at exact times | YES |
-| VC:LAUNCH_TIMING | 5 | Launch ts + 5m/10m fee stepdowns + authority revoke | YES |
 | VC:ELIGIBILITY_SAMPLE | 5 | $100 holder eligibility calc validated vs sample | YES |
 
 ---
 ## 4. VC Definitions
 
 ### VC:2.NO_UNSUPPORTED_EXT
-**Goal**: Verify mint uses only Raydium-compatible Token-2022 extensions.  
+**Goal**: Verify mint uses only compatible Token-2022 extensions.  
 **Inputs**: 
 - `token-info.json` → `mint`
 - List of incompatible extensions: TransferHook, PermanentDelegate, NonTransferable, DefaultAccountState, ConfidentialTransfer
@@ -86,7 +87,7 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Block**: YES - blocks Phase 3 if fail
 
 ### VC:2.FEE_RATE
-**Goal**: Transfer fee is exactly 30% (3000 basis points).  
+**Goal**: Transfer fee is exactly 5% (500 basis points).  
 **Inputs**: 
 - `token-info.json` → `mint`
 
@@ -95,11 +96,28 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 1. Fetch mint account
 2. Find TransferFeeConfig extension
 3. Read transferFeeBasisPoints field
-4. Must equal 3000 (30%)
+4. Must equal 500 (5%)
 ```
 
-**Success**: transferFeeBasisPoints === 3000  
+**Success**: transferFeeBasisPoints === 500  
 **Artifact**: `verification/vc2-fee-rate.json`  
+**Block**: YES - blocks Phase 3 if fail
+
+### VC:2.MAX_FEE
+**Goal**: Maximum fee is set to u64::MAX (unlimited).  
+**Inputs**: 
+- `token-info.json` → `mint`
+
+**Action**:
+```
+1. Fetch mint account
+2. Find TransferFeeConfig extension
+3. Read maximumFee field
+4. Must equal 18446744073709551615 (u64::MAX)
+```
+
+**Success**: maximumFee === u64::MAX  
+**Artifact**: `verification/vc2-max-fee.json`  
 **Block**: YES - blocks Phase 3 if fail
 
 ### VC:2.AUTHORITIES
@@ -144,14 +162,14 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Goal**: Vault auto-excluded all system accounts.  
 **Inputs**: 
 - Vault PDA
-- Expected exclusions: owner, treasury, keeper, vault program, vault PDA
+- Expected exclusions: owner, keeper, vault program, vault PDA
 
 **Action**:
 ```
 1. Query vault account data
 2. Decode fee_exclusions array
 3. Decode reward_exclusions array
-4. Verify all 5 system accounts in both arrays
+4. Verify all system accounts in both arrays
 ```
 
 **Success**: All system accounts found in both arrays  
@@ -176,7 +194,7 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Block**: YES - blocks token distribution if fail
 
 ### VC:3.TRANSFER_TEST
-**Goal**: Standard transfer works with 30% fee.  
+**Goal**: Standard transfer works with 5% fee.  
 **Inputs**:
 - Two test wallets with SOL
 - MIKO token mint
@@ -186,15 +204,15 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 1. Send 100 MIKO from wallet A to wallet B using:
    - Standard SPL token transfer instruction
    - NO custom scripts or special parameters
-2. Verify wallet B received 70 MIKO
-3. Verify 30 MIKO withheld as fee
+2. Verify wallet B received 95 MIKO
+3. Verify 5 MIKO withheld as fee
 4. Use same method any DEX or wallet would use
 ```
 
 **Success**: 
 - Sender balance decreased by 100
-- Receiver balance increased by 70
-- Withheld fees increased by 30  
+- Receiver balance increased by 95
+- Withheld fees increased by 5  
 **Artifact**: `verification/vc3-transfer-test.json`  
 **Block**: YES - blocks Phase 4 if fail
 
@@ -312,19 +330,59 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Artifact**: `verification/vc4-tax-flow-edge.json`  
 **Block**: YES - blocks production deployment if fail
 
-### VC:4.LOCAL_FORK_PASS
-**Goal**: Full launch path succeeds on local mainnet-fork (pool, ladder, fee schedule, tax flow).  
+### VC:4.DYNAMIC_EXCLUSIONS
+**Goal**: Pool detection and router exclusion work correctly.  
 **Inputs**:
 - Local Mainnet-Fork environment
-- Real Raydium CLMM program (use web_search for current ID)
+- Test liquidity pools
+- Test swap transactions
+
+**Action**:
+```
+1. Test pool detection:
+   - Create multiple test pools (CPMM, CLMM)
+   - Verify keeper bot detects all pools
+   - Verify pool registry updated in vault
+   - Confirm pools excluded from fee collection
+   - Confirm pools excluded from reward distribution
+
+2. Test router detection during swaps:
+   - Execute keeper swap through Jupiter
+   - Monitor transaction accounts
+   - Verify router accounts detected
+   - Verify temporary exclusion applied
+   - Confirm no fees charged on keeper swaps
+
+3. Test exclusion persistence:
+   - Verify pool exclusions saved in vault state
+   - Verify exclusions persist across harvests
+   - Test adding new pools dynamically
+   - Verify old pools remain excluded
+
+4. Test edge cases:
+   - Create pool after harvest starts
+   - Multiple pools created simultaneously
+   - Pool with minimal liquidity
+   - Complex routing paths
+```
+
+**Success**: All pools detected and excluded correctly  
+**Artifact**: `verification/vc4-dynamic-exclusions.json`  
+**Block**: YES - blocks Phase 5 if fail
+
+### VC:4.LOCAL_FORK_PASS
+**Goal**: Full launch path succeeds on local mainnet-fork.  
+**Inputs**:
+- Local Mainnet-Fork environment
+- Real Raydium CPMM program (use web_search for current ID)
 - Real Jupiter aggregator (use web_search for current ID)
 - Complete launch parameters from LAUNCH_LIQUIDITY_PARAMS.md
 
 **Action**:
 ```
-1. Create CLMM pool at T0:
+1. Create CPMM pool at T0:
    - Verify pool created with correct parameters
-   - Confirm initial price and liquidity range
+   - Confirm initial liquidity
    - Record pool creation timestamp
 
 2. Execute full Launch Liquidity Ladder:
@@ -333,25 +391,28 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
    - T+300s: Stage C liquidity (verify timing ±5s)
    - Confirm all adds from deployer wallet
 
-3. Monitor fee schedule transitions:
+3. Verify fixed 5% fee:
    - Set launch timestamp immediately after pool
-   - At +5 minutes: verify 30% → 15% transition
-   - At +10 minutes: verify 15% → 5% transition
-   - Verify fee authority revoked after final transition
+   - Confirm 5% fee active from start
+   - Verify no fee changes occur
+   - Verify maximum fee is unlimited
 
 4. Execute complete tax flow:
    - Generate transfers to accumulate 500k MIKO fees
    - Trigger harvest when threshold reached
+   - Verify pool accounts excluded from harvest
    - Verify 20%/80% split calculation
    - Execute Jupiter swap (real program)
+   - Verify router accounts excluded during swap
    - Verify reward distribution to holders
+   - Verify pools excluded from distribution
 
 5. Test First Monday token change:
    - Simulate Monday condition
    - Test reward token update via Smart Dial
 ```
 
-**Success**: All operations complete without mock adapters  
+**Success**: All operations complete with proper exclusions  
 **Artifact**: `verification/vc4-local-fork-pass.json`  
 **Block**: YES - blocks Phase 5 if fail
 
@@ -366,39 +427,18 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 
 **Action**:
 ```
-1. Record CLMM pool creation timestamp
-2. Verify bootstrap liquidity at T0 with narrow price range
-3. Verify Stage A at T+60s (±5 seconds) - narrow/midband
-4. Verify Stage B at T+180s (±5 seconds) - broader/re-center
-5. Verify Stage C at T+300s (±5 seconds) - stability backstop
+1. Record CPMM pool creation timestamp
+2. Verify bootstrap liquidity at T0
+3. Verify Stage A at T+60s (±5 seconds)
+4. Verify Stage B at T+180s (±5 seconds)
+5. Verify Stage C at T+300s (±5 seconds)
 6. Confirm all deployments from deployer wallet
-7. Verify Raydium fee tier (0.25% standard, 1% exotic)
+7. Verify Raydium fee tier (0.25% standard)
 8. Compare execution logs against LAUNCH_LIQUIDITY_PARAMS.md Section 6
 ```
 
 **Success**: All stages within time windows and match parameters  
 **Artifact**: `verification/vc-launch-liquidity.json` (test) or `verification/vc-launch-liquidity-mainnet.json` (production)  
-**Block**: YES - blocks mainnet deployment if fail  
-**Note**: This VC applies to BOTH test simulations AND production mainnet deployment
-
-### VC:LAUNCH_TIMING
-**Goal**: Fee transitions happen at exact times.  
-**Inputs**:
-- Pool creation timestamp
-- Vault launch timestamp
-- Fee history
-
-**Action**:
-```
-1. Record exact pool creation timestamp
-2. Verify vault launch timestamp set within 30 seconds
-3. At launch + 5 minutes (±10 seconds): verify fee = 1500
-4. At launch + 10 minutes (±10 seconds): verify fee = 500
-5. Verify fee authority === null after 10 minutes
-```
-
-**Success**: All transitions within time windows  
-**Artifact**: `verification/vc-launch-timing.json` (test) or `verification/vc-launch-timing-mainnet.json` (production)  
 **Block**: YES - blocks mainnet deployment if fail  
 **Note**: This VC applies to BOTH test simulations AND production mainnet deployment
 
@@ -408,14 +448,16 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 - Sample holder balances
 - MIKO/USD price
 - Exclusion lists
+- Pool registry
 
 **Action**:
 ```
 1. Calculate USD value for each holder
 2. Filter holders >= $100
 3. Remove excluded addresses
-4. Calculate reward shares
-5. Compare to manual calculation
+4. Remove all pool accounts
+5. Calculate reward shares
+6. Compare to manual calculation
 ```
 
 **Success**: Automated matches manual exactly  
@@ -436,8 +478,9 @@ Append "VC Gate:" anchors in existing docs at natural steps.
 3. **NO proceeding on failure** - stop and fix
 4. **NO manual overrides** - artifacts must show pass
 5. **Deployer wallet controls all liquidity operations**
-6. **Follow testing_strategy.md pipeline** - Mock CI → Local Fork → Canary
-7. **Use web_search for program IDs** - before Local-Fork setup
+6. **Dynamic exclusions must be thoroughly tested**
+7. **Follow testing_strategy.md pipeline** - Mock CI → Local Fork → Canary
+8. **Use web_search for program IDs** - before Local-Fork setup
 
 ---
 *End VERIFICATION_GUIDE.md*

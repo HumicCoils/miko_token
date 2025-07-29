@@ -28,9 +28,8 @@ Actual scripts/code are not included in documentation.
 | **Ops Wallet** | `deployer` | All 4 stages executed from this wallet. |
 | **Raydium Fee Tier** | 0.25% | Standard tier for MIKO/SOL pair. |
 | **Launch Slot / Time (UTC)** | `<YYYY-MM-DD HH:MM:SS>` | Based on pool creation confirmation block. Written to Vault. |
-| **Initial Transfer Fee** | 30% | Launch to +5m. |
-| **Fee @+5m** | 15% | Automatic transition. |
-| **Fee @+10m** | 5% (permanent) | Automatic transition. |
+| **Transfer Fee** | 5% | Fixed permanent rate. |
+| **Maximum Fee** | u64::MAX | Unlimited (no cap on fee amount). |
 
 > These fields are finalized during Launch Preflight phase and included in VC:4.LAUNCH_PREFLIGHT artifact.
 
@@ -76,7 +75,7 @@ Actual scripts/code are not included in documentation.
 | **Bootstrap** | T0 | 4.5% | 45M | 0.5 | 0.05 | Pool creation with balanced initial liquidity |
 | **A** | +60s | 22.5% | 225M | 2.5 | 0.25 | Major liquidity injection |
 | **B** | +180s | 27% | 270M | 3.0 | 0.3 | Further depth building |
-| **C** | +300s (~5m) | 36% | 360M | 4.0 | 0.4 | Final liquidity backstop before fee reduction |
+| **C** | +300s (~5m) | 36% | 360M | 4.0 | 0.4 | Final liquidity backstop |
 
 > **Note:** For Mainnet Canary, use 1/10th of test SOL quantities. Production uses full quantities.
 
@@ -127,7 +126,7 @@ Actual scripts/code are not included in documentation.
    At $190/SOL: ~$0.00000211/MIKO
 
 4. **Fee Interaction**  
-   30% tax during first 5 minutes naturally deters sniping
+   5% tax throughout (fixed rate, no transitions)
 
 5. **Constant Product**  
    Each stage maintains k = MIKO * SOL balance in pool
@@ -170,7 +169,7 @@ Complete the following log immediately after each stage execution.
 Recommended tolerances:  
 - Stage A: +60s ±5s  
 - Stage B: +180s ±5s  
-- Stage C: +300s ±5s (must settle *before* fee drop at +5m)  
+- Stage C: +300s ±5s  
 
 In production, allow ±block tolerance during network congestion. VERIFICATION_GUIDE only performs time window comparison.
 
@@ -188,7 +187,7 @@ Check items map to TO_DO.md Phase 4 / Phase 5 sections:
 | Stage Size Rows | Phase 4-B Launch Parameters | VC:4.LAUNCH_PREFLIGHT |
 | Launch Time | Phase 5 T0 | VC:LAUNCH_TIME_SET |
 | Stage Logs | Phase 5 stages | VC:LAUNCH_LIQUIDITY |
-| Fee Transition Times | Keeper config | VC:LAUNCH_TIMING |
+| Transfer Fee | Fixed at 5% | VC:2.FEE_RATE |
 
 ---
 
@@ -197,7 +196,8 @@ Check items map to TO_DO.md Phase 4 / Phase 5 sections:
 - No fallback to stale prices - must have fresh price data.
 - Document update required when Ops Wallet signer changes.
 - Community notice required minimum T-10m before stage value changes.
-- Stage non-execution (e.g., network error) → Emergency procedures: Document "Skip Remaining Adds / Hold Fee Drop / Manual Re-center" options.
+- Stage non-execution (e.g., network error) → Emergency procedures: Document "Skip Remaining Adds / Manual Re-center" options.
+- Transfer fee is permanently fixed at 5% - no transitions or changes possible.
 
 ---
 
@@ -208,3 +208,4 @@ Check items map to TO_DO.md Phase 4 / Phase 5 sections:
 - 2025-07-21: Added concrete default values for all stages, price bands, and SOL quantities.
 - 2025-07-21: Changed to require successful oracle price fetch before pool creation.
 - 2025-07-22: Switched from CLMM to CPMM for Token-2022 support, removed price bands, updated liquidity amounts.
+- 2025-07-28: Updated to reflect fixed 5% transfer fee (no transitions), added maximum fee as u64::MAX.

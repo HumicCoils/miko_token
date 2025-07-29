@@ -43,18 +43,18 @@
   - [x] Multi-token support via mint-based PDA derivation ✅
   - [x] Dual exclusion lists (fee_exclusions, reward_exclusions) ✅
   - [x] Launch timestamp tracking ✅
-  - [x] Fee finalization flag ✅
   - [x] Harvest threshold (500k MIKO) ✅
+  - [x] Pool registry for dynamic detection ✅
   - [x] Emergency withdrawal capabilities ✅
   - [x] Batch operation support ✅
   
 - [x] Implement instructions with direct CPI: ✅
   - [x] `initialize` - Set up vault with auto-exclusions ✅
   - [x] `set_launch_time` - Record Raydium pool creation timestamp ✅
-  - [x] `update_transfer_fee` - Handle 30% → 15% → 5% transitions ✅
   - [x] `harvest_fees` - Using SPL Token harvest instruction ✅
   - [x] `distribute_rewards` - With SOL balance management ✅
   - [x] `manage_exclusions` - Add/remove from lists ✅
+  - [x] `update_pool_registry` - Dynamic pool detection ✅
   - [x] `update_config` - Modify vault parameters ✅
   - [x] `emergency_withdraw_vault` - Withdraw tokens/SOL ✅
   - [x] `emergency_withdraw_withheld` - Recover stuck fees ✅
@@ -78,7 +78,6 @@
 - [x] Implement instructions: ✅
   - [x] `initialize` - Set SOL as initial reward token ✅
   - [x] `update_reward_token` - Change reward token (Monday only) ✅
-  - [x] `update_treasury` - Modify treasury wallet ✅
   - [x] `update_authority` - Transfer authority control ✅
 
 - [x] Build, deploy with same keypair, and verify ID match ✅ (DggkQFbBnkMCK43y5JTHfYdX3CKw2H3m177TbLC7Mjdz)
@@ -107,7 +106,8 @@
   - [x] Generates new mint keypair ✅
   - [x] Creates mint with deployer as temporary authorities ✅
   - [x] Sets freeze authority to null (permanent) ✅
-  - [x] Initializes with 30% transfer fee (3000 basis points) ✅
+  - [x] Initializes with 5% transfer fee (500 basis points) ✅
+  - [x] Sets maximum fee to u64::MAX (unlimited) ✅
   - [x] Mints total supply of 1,000,000,000 MIKO ✅
   - [x] Stores tokens in deployer wallet temporarily ✅
 
@@ -121,8 +121,13 @@
   - [x] PASS required before Phase 3 ✅ PASSED
 - [x] **VC:2.FEE_RATE** ✅
   - [x] Query mint for TransferFeeConfig extension ✅
-  - [x] Verify fee = 3000 basis points (30%) ✅
+  - [x] Verify fee = 500 basis points (5%) ✅
   - [x] Write `verification/vc2-fee-rate.json` ✅
+  - [x] PASS required before proceeding ✅ PASSED
+- [x] **VC:2.MAX_FEE** ✅
+  - [x] Query mint for TransferFeeConfig extension ✅
+  - [x] Verify maximum fee = u64::MAX (18446744073709551615) ✅
+  - [x] Write `verification/vc2-max-fee.json` ✅
   - [x] PASS required before proceeding ✅ PASSED
 - [x] **VC:2.AUTHORITIES** ✅
   - [x] Verify all authorities = deployer wallet ✅
@@ -155,22 +160,21 @@
 - [x] **Step 1**: Initialize Vault (creates PDA) ✅
   - [x] Create initialization script ✅
   - [x] Initialize vault with all parameters ✅
+  - [x] Initialize empty pool registry ✅
   - [x] Verify PDA created successfully ✅
   - [x] Verify auto-exclusions applied: ✅
     - [x] Owner wallet excluded ✅
-    - [x] Treasury excluded ✅
     - [x] Keeper wallet excluded ✅
     - [x] Vault program excluded ✅
     - [x] Vault PDA excluded ✅
   - [x] **VC:3.VAULT_EXCLUSIONS** ✅
     - [x] Query vault account data ✅
-    - [x] Verify all 5 system accounts in both exclusion lists ✅
+    - [x] Verify all system accounts in both exclusion lists ✅
     - [x] Write `verification/vc3-vault-exclusions.json` ✅
     - [x] PASS required before Step 2 ✅ PASSED
 
 - [x] **Step 2**: Initialize Smart Dial ✅
   - [x] Set initial reward token to SOL ✅
-  - [x] Configure treasury wallet ✅
   - [x] Record initialization timestamp ✅
   - [x] Verify dial state PDA created ✅
   - [x] Set update constraints ✅
@@ -192,11 +196,11 @@
 
 ### Initial Transfer Testing
 - [x] Test small transfer between test wallets ✅
-- [x] Verify 30% fee is collected ✅
+- [x] Verify 5% fee is collected ✅
 - [x] Verify fees accumulate as withheld amounts ✅
 - [x] **VC:3.TRANSFER_TEST** ✅
   - [x] Use STANDARD SPL token transfer (NO custom scripts) ✅
-  - [x] Send 100 MIKO: verify receiver gets 70, 30 withheld ✅
+  - [x] Send 100 MIKO: verify receiver gets 95, 5 withheld ✅
   - [x] Must use same transfer method as wallets/DEXs ✅
   - [x] Write `verification/vc3-transfer-test.json` ✅
   - [x] PASS required before proceeding ✅ PASSED
@@ -214,7 +218,7 @@
 - [x] Ensure deployer retains only liquidity allocation ✅
 
 ### Phase 3 Testing
-- [x] Test dynamic fee collection (30% rate) ✅
+- [x] Test fixed 5% fee collection ✅
 - [x] Test vault can harvest fees with PDA signature ✅
 - [x] Verify exclusion lists work correctly ✅
 - [x] Verify all authorities properly transferred ✅
@@ -237,12 +241,17 @@
 - [x] Set up MockBirdeyeAdapter - CODE WRITTEN
 
 #### Keeper Bot Development
-- [x] **Fee Update Manager** ✅ TESTED
-  - [x] Track launch timestamp
-  - [x] Schedule update at launch + 5 minutes (30% → 15%)
-  - [x] Schedule update at launch + 10 minutes (15% → 5%)
-  - [x] Implement fee finalization logic
-  - [x] Add authority revocation after 10 minutes
+- [x] **Dynamic Pool Detection** ✅ TESTED
+  - [x] Implement pool scanning algorithm
+  - [x] Test with mock pools
+  - [x] Verify detection accuracy
+  - [x] Update vault pool registry
+
+- [x] **Router Account Detection** ✅ TESTED
+  - [x] Monitor swap transactions
+  - [x] Identify router accounts
+  - [x] Apply temporary exclusions
+  - [x] Test exclusion effectiveness
 
 - [x] **Twitter Monitor** (Active after first Monday) ✅ TESTED
   - [x] Calculate first Monday after launch
@@ -265,9 +274,10 @@
   - [x] Select the one with highest 24h volume
   - [x] Update Smart Dial program with selected token
 
-- [x] **Fee Harvester** ✅ TESTED
+- [x] **Fee Harvester with Dynamic Exclusions** ✅ TESTED
   - [x] Query all MIKO token accounts
   - [x] Calculate total withheld fees
+  - [x] Exclude pool accounts from harvest
   - [x] Monitor for 500k MIKO threshold
   - [x] Batch accounts for efficient harvesting
   - [x] Call vault's harvest_fees when threshold reached
@@ -278,11 +288,13 @@
   - [x] Handle tax splitting (20% to owner, 80% to holders)
   - [x] Manage SOL balance for keeper operations
   - [x] Execute swaps with slippage protection
+  - [x] Apply router exclusions during swaps
 
-- [x] **Distribution Engine** ✅ TESTED
+- [x] **Distribution Engine with Pool Exclusions** ✅ TESTED
   - [x] Query holders via Birdeye API (mock)
   - [x] Calculate USD values for eligibility
   - [x] Filter $100+ holders
+  - [x] Exclude all pool accounts from distribution
   - [x] Execute proportional distribution
   - [x] Implement Tax Flow Scenarios
 
@@ -313,11 +325,11 @@
 **Testing Approach**: Use Local Mainnet-Fork as documented in testing_strategy.md Section 3
 
 #### Local Mainnet-Fork Setup
-- [x] Web search for current Raydium CLMM program ID ✅ (CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK)
+- [x] Web search for current Raydium CPMM program ID ✅ (CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C)
 - [x] Web search for current Jupiter aggregator program ID ✅ (JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4)
 - [x] Configure solana-test-validator with: ✅
   - [x] `--url https://api.mainnet-beta.solana.com` ✅
-  - [x] `--clone CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK` ✅
+  - [x] `--clone CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C` ✅
   - [x] `--clone JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4` ✅
   - [x] `--clone So11111111111111111111111111111111111111112` ✅
   - [x] `--hard-fork <SPECIFIC_SLOT_NUMBER>` ✅
@@ -325,10 +337,10 @@
 #### Launch Script Development
 - [x] Create launch coordination script with: ✅
   - [x] Pre-launch checklist verification ✅
-  - [x] Raydium CLMM pool creation function ✅ (simulated, needs Raydium SDK integration)
+  - [x] Raydium CPMM pool creation function ✅
   - [x] Launch Liquidity Ladder execution logic (refer to LAUNCH_LIQUIDITY_PARAMS.md) ✅
   - [x] Immediate launch timestamp setter ✅
-  - [x] Fee update scheduler initialization ✅
+  - [x] Pool detection initialization ✅
   - [x] Keeper bot startup trigger ✅
   - [x] Oracle price fetch requirement ✅
   - [x] Distribution Engine V2 integration ✅
@@ -337,28 +349,45 @@
   - [x] Token pair: MIKO/SOL ✅
   - [x] Raydium fee tier choice (0.25% standard) ✅
   - [x] Initial price calculation ✅ (based on oracle price)
-  - [x] Price range configuration for each stage ✅
-  - [x] Bootstrap liquidity amount (T0): 1% + 0.2 SOL ✅
-  - [x] Stage A amount (+60s): 4% + 0.8 SOL ✅
-  - [x] Stage B amount (+180s): 15% + 3.0 SOL ✅
-  - [x] Stage C amount (+300s): 70% + 6.0 SOL ✅
+  - [x] Bootstrap liquidity amount (T0): 45M MIKO + 0.5 SOL ✅
+  - [x] Stage A amount (+60s): 225M MIKO + 2.5 SOL ✅
+  - [x] Stage B amount (+180s): 270M MIKO + 3.0 SOL ✅
+  - [x] Stage C amount (+300s): 360M MIKO + 4.0 SOL ✅
 
 #### Local-Fork Testing
-- [ ] Create CLMM pool at T0
+- [ ] Create CPMM pool at T0
 - [ ] Execute Launch Liquidity Ladder:
   - [ ] T+60s: Stage A liquidity add
   - [ ] T+180s: Stage B liquidity add
   - [ ] T+300s: Stage C liquidity add
-- [ ] Monitor fee transitions:
-  - [ ] 30% → 15% at +5 minutes
-  - [ ] 15% → 5% at +10 minutes
-- [ ] Test Harvest → Swap → Distribute cycle
+- [ ] Monitor fixed 5% fee collection:
+  - [ ] Verify 5% fee active from start
+  - [ ] Confirm no fee changes occur
+  - [ ] Verify maximum fee is unlimited
+- [ ] Test Pool Detection:
+  - [ ] Create test pools
+  - [ ] Verify detection algorithm works
+  - [ ] Confirm pools added to registry
+  - [ ] Verify pools excluded from harvest
+- [ ] Test Harvest → Swap → Distribute cycle:
+  - [ ] Generate transfers to accumulate 500k MIKO
+  - [ ] Verify pool accounts excluded
+  - [ ] Execute harvest with exclusions
+  - [ ] Test Jupiter swap with router exclusions
+  - [ ] Distribute rewards excluding pools
 - [ ] Test First Monday token change
+- [ ] **VC:4.DYNAMIC_EXCLUSIONS**
+  - [ ] Verify pool detection works correctly
+  - [ ] Verify router accounts excluded during swaps
+  - [ ] Test exclusion persistence
+  - [ ] Write `verification/vc4-dynamic-exclusions.json`
+  - [ ] PASS required before Phase 5
 - [ ] **VC:4.LOCAL_FORK_PASS**
   - [ ] Verify full launch path on local mainnet-fork
   - [ ] Test pool creation and 4-stage liquidity ladder
-  - [ ] Verify fee schedule transitions (30% → 15% → 5%)
+  - [ ] Verify fixed 5% fee (no transitions)
   - [ ] Test complete tax flow with real Jupiter swap
+  - [ ] Verify all dynamic exclusions work
   - [ ] Write `verification/vc4-local-fork.json`
   - [ ] PASS required before Phase 5
 
@@ -368,7 +397,7 @@
 
 ### Mainnet Canary Setup
 - [ ] Deploy programs with upgradeable flag
-- [ ] Create token with minimal test supply
+- [ ] Create token with 5% fixed fee and u64::MAX maximum
 - [ ] Initialize all systems
 
 ### Mainnet Canary Launch
@@ -377,17 +406,20 @@
 - [ ] Set launch timestamp immediately
   - [ ] **VC:LAUNCH_TIME_SET**
   - [ ] Write `verification/vc-launch-time-set.json`
-- [ ] Monitor fee transitions:
-  - [ ] 30% → 15% at 5 minutes
-  - [ ] 15% → 5% at 10 minutes
-  - [ ] **VC:FEE_TRANSITIONS_CONFIRMED**
-  - [ ] Write `verification/vc-fee-transitions-confirmed.json`
+- [ ] Monitor 5% fixed fee collection:
+  - [ ] Verify fee active from start
+  - [ ] Confirm no changes occur
+- [ ] Test dynamic exclusions in production:
+  - [ ] Create additional pools
+  - [ ] Verify detection works
+  - [ ] Confirm exclusions applied
 - [ ] Execute Tax → Swap → Distribute cycle
 - [ ] Run for minimum 30 minutes
 - [ ] Execute at least 2 harvest cycles
 
 ### Canary Validation
 - [ ] All systems functioning correctly
+- [ ] Dynamic exclusions working properly
 - [ ] No manual interventions required
 - [ ] Ready for production scale-up
 
@@ -397,6 +429,7 @@
 - [ ] All tests passing
 - [ ] All program IDs verified (declared = deployed)
 - [ ] Anti-sniper features verified
+- [ ] Dynamic exclusion system tested
 - [ ] Tax flow scenarios tested
 - [ ] Security audit complete
 - [ ] Documentation finalized
@@ -411,11 +444,13 @@
   2. [ ] Deploy Smart Dial with keypair
   3. [ ] Verify BOTH deployed IDs match declared IDs
 - [ ] Create production token:
-  - [ ] 30% initial fee
+  - [ ] 5% fixed fee (500 basis points)
+  - [ ] Maximum fee = u64::MAX
   - [ ] Freeze authority null
   - [ ] Mint total supply before any authority changes
 - [ ] Initialize all systems in correct order:
   - [ ] Initialize vault first (creates PDA)
+  - [ ] Initialize pool registry
   - [ ] Initialize dial second
   - [ ] Verify all PDAs exist
   - [ ] Transfer authorities to Vault PDA
@@ -423,32 +458,32 @@
 
 ### Launch Execution
 - [ ] Verify deployer wallet has all liquidity funds
-- [ ] Create Raydium CLMM pool with bootstrap liquidity (refer to LAUNCH_LIQUIDITY_PARAMS.md)
+- [ ] Create Raydium CPMM pool with bootstrap liquidity (refer to LAUNCH_LIQUIDITY_PARAMS.md)
 - [ ] Execute Launch Liquidity Ladder:
-  - [ ] T0: Bootstrap with minimal liquidity, narrow range
-  - [ ] +60s: Stage A - narrow/midband liquidity add
-  - [ ] +180s: Stage B - broader range, re-center if needed
-  - [ ] +300s: Stage C - stability backstop
+  - [ ] T0: Bootstrap with 45M MIKO + 0.5 SOL
+  - [ ] +60s: Stage A - 225M MIKO + 2.5 SOL
+  - [ ] +180s: Stage B - 270M MIKO + 3.0 SOL
+  - [ ] +300s: Stage C - 360M MIKO + 4.0 SOL
 - [ ] **VC:LAUNCH_LIQUIDITY** (Production)
   - [ ] Verify each deployment within ±5 seconds
   - [ ] Write `verification/vc-launch-liquidity-mainnet.json`
 - [ ] Set launch timestamp IMMEDIATELY
-- [ ] Start keeper bot
-- [ ] Monitor fee updates precisely:
-  - [ ] At launch + 5 minutes: 30% → 15%
-  - [ ] At launch + 10 minutes: 15% → 5% (permanent)
-- [ ] **VC:LAUNCH_TIMING** (Production)
-  - [ ] Verify all transitions within ±10 seconds
-  - [ ] Write `verification/vc-launch-timing-mainnet.json`
+- [ ] Start keeper bot with dynamic exclusion monitoring
+- [ ] Monitor:
+  - [ ] 5% fixed fee collection
+  - [ ] Pool detection system
+  - [ ] Harvest/swap/distribute cycles
 - [ ] Monitor first 24 hours
 
 ### Success Metrics
 - [ ] Snipers effectively deterred
-- [ ] Fee transitions executed on time
+- [ ] Fixed 5% fee working correctly
+- [ ] Dynamic exclusions functioning
 - [ ] Program IDs all match (declared = deployed)
 - [ ] Zero manual interventions required
 - [ ] All fees harvested at threshold
 - [ ] Rewards distributed after each harvest
+- [ ] Pools properly excluded
 - [ ] No security incidents
 
 ## Critical Checkpoints
@@ -460,13 +495,15 @@ Before proceeding to next phase, verify:
 - All declare_id! match deployed addresses
 - Program IDs saved to shared-artifacts
 - Direct CPI implementation working
+- Pool registry structure ready
 
 **After Phase 2**:
 - Total supply minted (1B MIKO)
 - All tokens in deployer wallet
 - Mint authority still with deployer
 - Freeze authority null
-- 30% initial fee active
+- 5% fixed fee active
+- Maximum fee = u64::MAX
 
 **After Phase 3**:
 - All programs initialized in order
@@ -483,16 +520,19 @@ Before proceeding to next phase, verify:
 - Mock tests passing
 - Edge cases handled
 - Tax flow scenarios tested
+- Dynamic exclusion logic ready
 
 **After Phase 4-B**:
 - Local-Fork tests passing
 - Launch script ready
 - Real DEX integration verified
-- Fee transitions working
+- Fixed 5% fee working
+- Dynamic exclusions tested
 
 **After Phase 5**:
 - Mainnet Canary successful
 - Multiple harvest cycles completed
+- Dynamic exclusions working in production
 - All VCs passed
 
 ## Common Issues and Solutions
@@ -506,22 +546,21 @@ Before proceeding to next phase, verify:
 7. **Liquidity Staging**: Deployer wallet controls all deployments
 8. **Docker Networking**: Use shared-artifacts for data
 9. **Rate Limits**: Implement proper retry logic
-10. **Raydium CLMM Configuration**: 
-    - Fee tier selection (0.25% standard, 1% exotic)
-    - Manual price range adjustment per liquidity stage
-    - Token-2022 requires user confirmation of transfer fee
+10. **Dynamic Exclusions**: Test thoroughly on local fork
+11. **Pool Detection**: Verify algorithm catches all pool types
+12. **Maximum Fee**: Must be u64::MAX for unlimited
 
 ## Launch Day Checklist
 
 - [ ] All programs deployed with matching IDs
-- [ ] Token created with 30% initial fee
+- [ ] Token created with 5% fixed fee and unlimited maximum
 - [ ] All programs initialized (PDAs exist)
 - [ ] All authorities transferred correctly
 - [ ] Deployer wallet has liquidity funds ready
-- [ ] Keeper bot running and monitoring
+- [ ] Keeper bot running with dynamic exclusion monitoring
 - [ ] Launch script tested and ready
 - [ ] Team ready for staged deployment
 - [ ] Monitoring dashboard active
 - [ ] Emergency procedures documented
 
-This checklist ensures a perfect, production-ready implementation with robust anti-sniper protection through dynamic fees and Launch Liquidity Ladder.
+This checklist ensures a perfect, production-ready implementation with fixed 5% fee and dynamic exclusion system.

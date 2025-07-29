@@ -1,0 +1,22 @@
+{
+  "name": "phase4b",
+  "version": "1.0.0",
+  "description": "This directory contains scripts for testing the MIKO token launch sequence using a local mainnet fork.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@pythnetwork/client": "^2.22.1",
+    "@raydium-io/raydium-sdk-v2": "^0.2.5-alpha",
+    "axios": "^1.11.0",
+    "bn.js": "^5.2.2",
+    "bs58": "^6.0.0",
+    "decimal.js": "^10.6.0"
+  }
+}

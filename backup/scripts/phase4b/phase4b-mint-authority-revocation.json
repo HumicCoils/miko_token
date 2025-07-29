@@ -1,0 +1,9 @@
+{
+  "timestamp": "2025-07-23T17:04:45.007Z",
+  "token": "EkgPtCLLsbWxhdYrCpqWej2ULoytu6QcygpnyFeiT4Gs",
+  "previousAuthority": "CDTSFkBB1TuRw7WFZj4ZQpagwBhw5iURjC13kS6hEgSc",
+  "newAuthority": null,
+  "signature": "2j9HcnrF7rXGWjDKB93RJtLr59H22mNJW4eoCz9rVM5GyYUWSEj428S7ELBSfivVAcnsmLkSk8AbETRAhC1vzXHy",
+  "totalSupply": "1,000,000,000 MIKO",
+  "note": "Mint authority permanently revoked. No more MIKO can ever be minted."
+}
