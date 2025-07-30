@@ -50,11 +50,6 @@ Actual scripts/code are not included in documentation.
 - *If oracle fetch fails, use last successful price*
 - *Final price locked at pool creation execution*
 
-*For mainnet canary and production:*
-- *SOL price updates at T-30m, T-10m, T-5m, T-1m*
-- *If oracle fetch fails, use last successful price*
-- *Final price locked at pool creation*
-
 ---
 
 ## 3. Stage Allocation Model
@@ -65,6 +60,8 @@ Actual scripts/code are not included in documentation.
 - `%TS_stage[i]` = `C_stage[i] / TS * 100`.
 - SOL quantities calculated to maintain balanced liquidity.
 - CPMM uses constant product formula without price ranges.
+
+**Important**: All transfers incur 5% fee. Pool operations, liquidity adds, and all other transfers will have 5% deducted automatically.
 
 ---
 
@@ -77,7 +74,8 @@ Actual scripts/code are not included in documentation.
 | **B** | +180s | 27% | 270M | 3.0 | 0.3 | Further depth building |
 | **C** | +300s (~5m) | 36% | 360M | 4.0 | 0.4 | Final liquidity backstop |
 
-> **Note:** For Mainnet Canary, use 1/10th of test SOL quantities. Production uses full quantities.
+> **Note:** For Mainnet Canary, use 1/10th of test SOL quantities. Production uses full quantities.  
+> **Fee Impact:** Each MIKO transfer will have 5% deducted. Plan liquidity amounts accordingly.
 
 ---
 
@@ -126,7 +124,8 @@ Actual scripts/code are not included in documentation.
    At $190/SOL: ~$0.00000211/MIKO
 
 4. **Fee Interaction**  
-   5% tax throughout (fixed rate, no transitions)
+   5% tax throughout (fixed rate)
+   All transfers including pool operations incur this fee
 
 5. **Constant Product**  
    Each stage maintains k = MIKO * SOL balance in pool
@@ -151,6 +150,7 @@ Complete the following log immediately after each stage execution.
 - MIKO Added:
 - SOL Added:
 - Pool ID:
+- 5% Fee Applied: YES (automatic)
 - Notes (prompt shown? warnings?):
 
 ### 6.2 +60s Stage A Log
@@ -197,7 +197,8 @@ Check items map to TO_DO.md Phase 4 / Phase 5 sections:
 - Document update required when Ops Wallet signer changes.
 - Community notice required minimum T-10m before stage value changes.
 - Stage non-execution (e.g., network error) → Emergency procedures: Document "Skip Remaining Adds / Manual Re-center" options.
-- Transfer fee is permanently fixed at 5% - no transitions or changes possible.
+- Transfer fee is permanently fixed at 5% - applies to ALL transfers including pool operations.
+- Dynamic pool detection ensures pools are excluded from reward distributions (application level).
 
 ---
 
@@ -208,4 +209,4 @@ Check items map to TO_DO.md Phase 4 / Phase 5 sections:
 - 2025-07-21: Added concrete default values for all stages, price bands, and SOL quantities.
 - 2025-07-21: Changed to require successful oracle price fetch before pool creation.
 - 2025-07-22: Switched from CLMM to CPMM for Token-2022 support, removed price bands, updated liquidity amounts.
-- 2025-07-28: Updated to reflect fixed 5% transfer fee (no transitions), added maximum fee as u64::MAX.
+- 2025-07-29: Updated to reflect fixed 5% transfer fee on ALL transfers, added maximum fee as u64::MAX, clarified pool exclusions are reward-only.

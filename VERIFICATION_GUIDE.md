@@ -1,6 +1,6 @@
 # VERIFICATION_GUIDE.md
 Process-First Verification Layer for MIKO Token System  
-Revision: 2025-07-28
+Revision: 2025-07-29
 
 ---
 ## 0. Context
@@ -52,14 +52,14 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 | VC:2.MAX_FEE | 2 | Maximum fee == u64::MAX (unlimited) | YES |
 | VC:2.AUTHORITIES | 2 | All authorities set correctly before Phase 3 | YES |
 | VC:3.PDA_CALCULATION | 3 | Vault PDA matches expected derivation | YES |
-| VC:3.VAULT_EXCLUSIONS | 3 | Vault auto-exclusion arrays contain all system accounts | YES |
+| VC:3.VAULT_EXCLUSIONS | 3 | Vault auto-exclusion arrays contain system accounts (rewards only) | YES |
 | VC:3.AUTH_SYNC | 3 | Token-2022 fee/withdraw authorities -> Vault PDA | YES |
 | VC:3.TRANSFER_TEST | 3 | Standard token transfer works with 5% fee | YES |
 | VC:4.KEEPER_PREFLIGHT | 4 | Keeper env/program reachability | YES |
 | VC:4.FIRST_MONDAY | 4 | First Monday calculation correct | YES |
 | VC:4.TAX_FLOW_LOGIC | 4 | Tax flow scenarios correctly implemented | YES |
 | VC:4.TAX_FLOW_EDGE | 4 | Mock CI tests must trigger rollback, slippage, concurrent harvest edge cases and pass recovery logic | YES |
-| VC:4.DYNAMIC_EXCLUSIONS | 4-B | Pool detection and router exclusion work correctly | YES |
+| VC:4.DYNAMIC_POOL_DETECTION | 4-B | Pool detection for reward exclusion works correctly | YES |
 | VC:4.LOCAL_FORK_PASS | 4-B | Full launch path succeeds on local mainnet-fork | YES |
 | VC:LAUNCH_LIQUIDITY | 5 | Launch Liquidity Ladder executed at exact times | YES |
 | VC:ELIGIBILITY_SAMPLE | 5 | $100 holder eligibility calc validated vs sample | YES |
@@ -159,7 +159,7 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Block**: YES - blocks initialization if fail
 
 ### VC:3.VAULT_EXCLUSIONS
-**Goal**: Vault auto-excluded all system accounts.  
+**Goal**: Vault auto-excluded all system accounts from rewards.  
 **Inputs**: 
 - Vault PDA
 - Expected exclusions: owner, keeper, vault program, vault PDA
@@ -167,12 +167,12 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Action**:
 ```
 1. Query vault account data
-2. Decode fee_exclusions array
-3. Decode reward_exclusions array
-4. Verify all system accounts in both arrays
+2. Decode reward_exclusions array
+3. Verify all system accounts in array
+4. Note: Fee exclusions not possible with Token-2022
 ```
 
-**Success**: All system accounts found in both arrays  
+**Success**: All system accounts found in reward_exclusions array  
 **Artifact**: `verification/vc3-vault-exclusions.json`  
 **Block**: YES - blocks authority transfer if fail
 
@@ -207,6 +207,7 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 2. Verify wallet B received 95 MIKO
 3. Verify 5 MIKO withheld as fee
 4. Use same method any DEX or wallet would use
+5. Accept that ALL transfers incur 5% fee
 ```
 
 **Success**: 
@@ -283,6 +284,8 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
    - If keeper ≥ 0.05 SOL:
      * Verify all tax swapped to reward token
      * Verify 20% to owner, 80% to holders
+
+3. Note: All operations incur 5% fee
 ```
 
 **Success**: All scenarios execute correctly  
@@ -330,8 +333,8 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Artifact**: `verification/vc4-tax-flow-edge.json`  
 **Block**: YES - blocks production deployment if fail
 
-### VC:4.DYNAMIC_EXCLUSIONS
-**Goal**: Pool detection and router exclusion work correctly.  
+### VC:4.DYNAMIC_POOL_DETECTION
+**Goal**: Pool detection for reward exclusions works correctly.  
 **Inputs**:
 - Local Mainnet-Fork environment
 - Test liquidity pools
@@ -343,31 +346,30 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
    - Create multiple test pools (CPMM, CLMM)
    - Verify keeper bot detects all pools
    - Verify pool registry updated in vault
-   - Confirm pools excluded from fee collection
    - Confirm pools excluded from reward distribution
+   - Note: Pools still pay 5% fee on transfers
 
-2. Test router detection during swaps:
-   - Execute keeper swap through Jupiter
-   - Monitor transaction accounts
-   - Verify router accounts detected
-   - Verify temporary exclusion applied
-   - Confirm no fees charged on keeper swaps
-
-3. Test exclusion persistence:
+2. Test exclusion persistence:
    - Verify pool exclusions saved in vault state
    - Verify exclusions persist across harvests
    - Test adding new pools dynamically
    - Verify old pools remain excluded
 
-4. Test edge cases:
+3. Test edge cases:
    - Create pool after harvest starts
    - Multiple pools created simultaneously
    - Pool with minimal liquidity
    - Complex routing paths
+
+4. Verify fee behavior:
+   - Confirm 5% fee applies to ALL transfers
+   - Verify pool operations incur fees
+   - Confirm keeper swaps incur fees
+   - Accept universal fee application
 ```
 
-**Success**: All pools detected and excluded correctly  
-**Artifact**: `verification/vc4-dynamic-exclusions.json`  
+**Success**: All pools detected and excluded from rewards correctly  
+**Artifact**: `verification/vc4-dynamic-pool-detection.json`  
 **Block**: YES - blocks Phase 5 if fail
 
 ### VC:4.LOCAL_FORK_PASS
@@ -384,12 +386,14 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
    - Verify pool created with correct parameters
    - Confirm initial liquidity
    - Record pool creation timestamp
+   - Accept 5% fee on liquidity operations
 
 2. Execute full Launch Liquidity Ladder:
    - T+60s: Stage A liquidity (verify timing ±5s)
    - T+180s: Stage B liquidity (verify timing ±5s)
    - T+300s: Stage C liquidity (verify timing ±5s)
    - Confirm all adds from deployer wallet
+   - Accept 5% fee on all liquidity adds
 
 3. Verify fixed 5% fee:
    - Set launch timestamp immediately after pool
@@ -400,19 +404,18 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 4. Execute complete tax flow:
    - Generate transfers to accumulate 500k MIKO fees
    - Trigger harvest when threshold reached
-   - Verify pool accounts excluded from harvest
+   - Accept 5% fee on harvest operations
    - Verify 20%/80% split calculation
-   - Execute Jupiter swap (real program)
-   - Verify router accounts excluded during swap
+   - Execute Jupiter swap (accept 5% fee)
    - Verify reward distribution to holders
-   - Verify pools excluded from distribution
+   - Verify pools excluded from reward distribution
 
 5. Test First Monday token change:
    - Simulate Monday condition
    - Test reward token update via Smart Dial
 ```
 
-**Success**: All operations complete with proper exclusions  
+**Success**: All operations complete with proper exclusions and fees  
 **Artifact**: `verification/vc4-local-fork-pass.json`  
 **Block**: YES - blocks Phase 5 if fail
 
@@ -435,6 +438,7 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 6. Confirm all deployments from deployer wallet
 7. Verify Raydium fee tier (0.25% standard)
 8. Compare execution logs against LAUNCH_LIQUIDITY_PARAMS.md Section 6
+9. Accept 5% fee on all operations
 ```
 
 **Success**: All stages within time windows and match parameters  
@@ -447,7 +451,7 @@ Due to devnet DEX limitations, VCs adapt to different test environments (see tes
 **Inputs**:
 - Sample holder balances
 - MIKO/USD price
-- Exclusion lists
+- Reward exclusion list
 - Pool registry
 
 **Action**:
@@ -478,9 +482,10 @@ Append "VC Gate:" anchors in existing docs at natural steps.
 3. **NO proceeding on failure** - stop and fix
 4. **NO manual overrides** - artifacts must show pass
 5. **Deployer wallet controls all liquidity operations**
-6. **Dynamic exclusions must be thoroughly tested**
+6. **Dynamic pool detection for rewards only**
 7. **Follow testing_strategy.md pipeline** - Mock CI → Local Fork → Canary
 8. **Use web_search for program IDs** - before Local-Fork setup
+9. **Accept 5% fee on ALL transfers** - no exemptions possible
 
 ---
 *End VERIFICATION_GUIDE.md*

@@ -1,7 +1,0 @@
-{
-  "rpc_url": "http://127.0.0.1:8899",
-  "vault_program_id": "9qPiWoJJdas55cMZqa8d62tVHP9hbYX6NwT34qbHe9pt",
-  "smart_dial_program_id": "BDYdwfdZF8RAbUokzw1YgNmeRiSGYwNsi8uF7rfsStUe",
-  "token_mint": "Bwa7ZHxhyVXSrdadx8WEFKnQorxw288c5yc4BfajHLmE",
-  "keeper_keypair_path": "./phase4b-keeper/phase4b-keeper-keypair.json"
-}

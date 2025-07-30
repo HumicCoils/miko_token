@@ -15,14 +15,15 @@ This document outlines the comprehensive development plan for the MIKO token sys
    - Fee configuration authority managed by Vault
    - Withheld fees accumulate in token accounts
    - Freeze authority null, mint authority revoked
+   - **Note**: Transfer fees apply to ALL transfers - no exemptions possible
 
 2. **Absolute Vault Program**
    - Core tax collection and distribution logic
    - Launch timestamp tracking
-   - Dynamic exclusion detection system
+   - Dynamic pool detection for reward exclusions
    - Holder registry management
    - Reward distribution mechanics (20% owner/80% holders split)
-   - Smart exclusion list management with pool detection
+   - Smart exclusion list management (rewards only)
    - Emergency withdrawal capabilities
 
 3. **Smart Dial Program**
@@ -32,11 +33,11 @@ This document outlines the comprehensive development plan for the MIKO token sys
 
 4. **Keeper Bot**
    - Automated monitoring with threshold-based execution
-   - Dynamic pool and router account detection
+   - Dynamic pool account detection for reward exclusions
    - Harvest trigger: 500,000 MIKO accumulated (0.05% of supply)
    - Pinned tweet monitoring for reward token selection (after first Monday)
    - Symbol disambiguation via 24h volume comparison
-   - Jupiter swap integration with dynamic fee exclusion
+   - Jupiter swap integration (accepts 5% fee on swaps)
    - Birdeye API integration for holder data and token volumes
    - Pool detection for reward distribution exclusions
    - No wallet private key required
@@ -107,7 +108,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
    - API keys placeholder
 
 ### Phase 1: Core Programs Development (Week 1-3)
-**Objective**: Develop and deploy on-chain programs with anti-sniper features and dynamic exclusion system
+**Objective**: Develop and deploy on-chain programs with anti-sniper features and dynamic pool detection
 
 #### CRITICAL DEPLOYMENT PROCESS
 **WARNING: Incorrect deployment order causes program ID mismatches that block the entire system**
@@ -159,8 +160,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - owner_wallet: Owner (20% recipient)
      - token_mint: MIKO token mint
      - min_hold_amount: Min $100 USD in tokens
-     - fee_exclusions: Dynamic fee harvest exclusions list
-     - reward_exclusions: Dynamic reward exclusions list
+     - reward_exclusions: Dynamic reward exclusions list (pools + system)
      - keeper_authority: Keeper bot authority
      - launch_timestamp: Raydium pool creation time
      - harvest_threshold: 500,000 MIKO (0.05% of supply)
@@ -173,25 +173,22 @@ This document outlines the comprehensive development plan for the MIKO token sys
    - Set current timestamp when Raydium pool is created
    - Return error if already launched
 
-4. **Dynamic Exclusion System**:
+4. **Dynamic Pool Detection System**:
    - Implement pool_detection function:
      - Scan token accounts for pool patterns
      - Check for associated vault accounts
      - Identify liquidity pool PDAs
      - Add detected pools to registry
-   - Implement router_detection during swaps:
-     - Monitor transaction accounts
-     - Identify Jupiter router accounts
-     - Temporarily exclude during swap operations
-   - Auto-update exclusion lists based on detections
+   - Auto-update reward exclusion list with detected pools
+   - No fee exclusions (Token-2022 limitation)
 
 5. **Instructions with Direct CPI**:
    - harvest_fees: Direct CPI implementation to Token-2022
      - Use SPL Token-2022's harvest_withheld_tokens_to_mint instruction
      - Build instruction with token mint and account list
-     - Check dynamic exclusions before including accounts
      - Execute with PDA signature using invoke_signed
      - Process accounts in batches for efficiency
+     - Accept that 5% fee applies to all harvests
 
 6. **Authority Design**:
    - `authority`: Program admin (can update configs)
@@ -300,7 +297,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - Initialize empty pool registry
      - Verify PDA created successfully
      
-     > VC Gate:3.VAULT_EXCLUSIONS – Verify vault auto-excluded all system accounts in both lists; write verification/vc3-vault-exclusions.json; BLOCK if any missing
+     > VC Gate:3.VAULT_EXCLUSIONS – Verify vault auto-excluded all system accounts in reward list; write verification/vc3-vault-exclusions.json; BLOCK if any missing
    
    - **Step 2**: Initialize Smart Dial
      - Call dial program's initialize method
@@ -344,12 +341,12 @@ This document outlines the comprehensive development plan for the MIKO token sys
    - All authorities transferred correctly
    - Token distribution complete (liquidity remains in deployer)
    - All programs initialized and working
-   - Fee collection mechanism active
+   - Fee collection mechanism active (5% on ALL transfers)
    - Deployer wallet ready for liquidity deployment
    - System ready for launch
 
 ### Phase 4: Keeper Bot Development (Week 6-7)
-**Objective**: Automated operations with dynamic exclusion detection and comprehensive testing using Local Mainnet-Fork
+**Objective**: Automated operations with dynamic pool detection for reward exclusions
 
 1. **Configuration**:
    - Load environment variables for:
@@ -369,42 +366,31 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - Check for associated vault accounts
      - Maintain registry of detected pools
    - Update vault's pool_registry periodically
+   - Apply to REWARD EXCLUSIONS ONLY (not fees)
    - Test with Local Mainnet-Fork:
      - Create test pools
      - Verify detection algorithm
      - Ensure all pools are found
 
-3. **Router Account Detection**:
-   - Monitor transactions during swaps:
-     - Identify Jupiter router accounts
-     - Track intermediate swap accounts
-     - Build temporary exclusion list
-   - Apply exclusions during harvest operations
-   - Test with Local Mainnet-Fork:
-     - Execute test swaps
-     - Verify router accounts detected
-     - Ensure no fees charged on keeper swaps
-
-4. **Fee Harvest Monitor**:
+3. **Fee Harvest Monitor**:
    - **Pre-harvest Validation**:
      - Verify vault is initialized
      - Verify harvest authority is set correctly
-     - Update dynamic exclusions before harvest
      - Check that withheld fees exist before attempting harvest
    - Class to monitor and harvest fees:
      - Define harvest threshold (500k MIKO with decimals)
      - Query total withheld fees across all accounts
-     - Exclude dynamically detected pool/router accounts
      - Execute harvest when threshold reached
      - Batch accounts for efficiency (e.g., 20 per transaction)
      - Trigger swap and distribution after successful harvest
+     - Accept that 5% fee applies to harvest operations
    - Test with Local Mainnet-Fork:
      - Generate test transactions to accumulate fees
      - Reach 500k MIKO threshold
      - Execute actual harvest transaction
      - Verify entire flow works correctly
 
-5. **Twitter AI Integration** (Active after first Monday):
+4. **Twitter AI Integration** (Active after first Monday):
    - **Pre-integration Validation**:
      - Set test launch timestamp in the past
      - Calculate first Monday from launch timestamp
@@ -419,11 +405,8 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - Query all tokens with that symbol via Birdeye API
      - Select the token with highest 24h volume among matching symbols
      - Update reward token in Smart Dial program only if different from current
-   - Test with Local Mainnet-Fork:
-     - Simulate Monday condition
-     - Test full token selection and update flow
 
-6. **Distribution Engine with Dynamic Exclusions**:
+5. **Distribution Engine with Dynamic Pool Exclusions**:
    - **Pre-distribution Requirements**:
      - Verify harvest has been completed
      - Verify reward token is set in Smart Dial
@@ -440,7 +423,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
    - Test with Local Mainnet-Fork:
      - Create test holder accounts
      - Create test pools
-     - Verify pools are excluded
+     - Verify pools are excluded from rewards
      - Test full distribution flow
    - **Implement Tax Flow Scenarios**:
      - **Scenario 1 - Reward Token is SOL**:
@@ -461,23 +444,24 @@ This document outlines the comprehensive development plan for the MIKO token sys
        - If keeper balance ≥ 0.05 SOL:
          - Swap all tax to reward token
          - Distribute 20% to owner, 80% to holders
+     - **Note**: All swaps incur 5% fee
 
-7. **Tax Flow Implementation**:
+6. **Tax Flow Implementation**:
    > VC Gate:4.TAX_FLOW_LOGIC – Test all tax scenarios; write verification/vc4-tax-flow-logic.json; BLOCK if scenarios fail
    
    > VC Gate:4.TAX_FLOW_EDGE – Test edge cases (exact 0.05 SOL, swap failures, concurrent harvests); write verification/vc4-tax-flow-edge.json; BLOCK production if fail
    
-   > VC Gate:4.DYNAMIC_EXCLUSIONS – Test pool detection, router detection, and exclusion application; write verification/vc4-dynamic-exclusions.json; BLOCK if detection fails
+   > VC Gate:4.DYNAMIC_POOL_DETECTION – Test pool detection and reward exclusion application; write verification/vc4-dynamic-pool-detection.json; BLOCK if detection fails
 
-8. **Launch Script Preparation**:
+7. **Launch Script Preparation**:
    - Create launch coordination script with:
      - Pre-launch checklist verification
      - Raydium CPMM pool creation function
-     - Launch Liquidity Ladder execution logic (refer to LAUNCH_LIQUIDITY_PARAMS.md)
+     - Launch Liquidity Ladder execution logic
      - Immediate launch timestamp setter
      - Initial pool detection and registration
      - Keeper bot startup trigger
-   - Prepare Launch Preflight Package (using LAUNCH_LIQUIDITY_PARAMS.md template):
+   - Prepare Launch Preflight Package:
      - Token pair: MIKO/SOL
      - Raydium fee tier (0.25% for standard pairs)
      - Initial liquidity amounts for each stage
@@ -486,12 +470,12 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - Create test CPMM pool
      - Execute all liquidity stages with exact timing
      - Verify launch timestamp setting
-     - Test pool detection
+     - Test pool detection for reward exclusions
    - Add timing safeguards and emergency procedures
 
-9. **Scheduler**:
+8. **Scheduler**:
    - Launch-time operations:
-     - Execute Launch Liquidity Ladder stages at T+60s, T+180s, T+300s (refer to LAUNCH_LIQUIDITY_PARAMS.md for timing)
+     - Execute Launch Liquidity Ladder stages at T+60s, T+180s, T+300s
      - Monitor Raydium CPMM price action for re-centering decisions
    - Weekly reward token updates:
      - Every Monday at 03:00 UTC
@@ -525,8 +509,8 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - T+60s: Stage A
      - T+180s: Stage B
      - T+300s: Stage C
-   - Verify pool detection works in production
-   - Monitor 5% fixed fee collection
+   - Verify pool detection works for reward exclusions
+   - Monitor 5% fixed fee collection on all transfers
    - Run for minimum 30 minutes
    - Execute at least 2 harvest cycles
    
@@ -535,7 +519,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
 3. **Final Validation**:
    - All harvest/swap/distribute cycles working
    - Tax flow scenarios validated in production
-   - Dynamic exclusions working correctly
+   - Dynamic pool exclusions working correctly (rewards only)
    - First Monday logic confirmed
    - $100 holder filtering accurate
    
@@ -552,11 +536,11 @@ This document outlines the comprehensive development plan for the MIKO token sys
 **Objective**: Mainnet deployment with monitoring
 
 1. **Pre-deployment Checklist**:
-   - [ ] All tests passing (including dynamic exclusion validation)
+   - [ ] All tests passing (including dynamic pool detection)
    - [ ] All program IDs verified (declared = deployed)
    - [ ] Anti-sniper features tested
    - [ ] Launch script ready with staged liquidity logic
-   - [ ] Pool detection system tested
+   - [ ] Pool detection system tested (rewards only)
    - [ ] First Monday calculation verified
    - [ ] Tax flow edge cases tested
    - [ ] All Phase 5 tests passed
@@ -578,11 +562,10 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - Verify all authorities transferred
      - Verify keeper bot is running
      - Verify monitoring dashboard active
-     - Verify Launch Preflight Package parameters (from LAUNCH_LIQUIDITY_PARAMS.md)
    - **Launch Execution**:
      - Create CPMM pool with bootstrap liquidity
      - Set launch timestamp in same block if possible
-     - Execute Launch Liquidity Ladder (using exact parameters from LAUNCH_LIQUIDITY_PARAMS.md):
+     - Execute Launch Liquidity Ladder:
        - T+60s: Stage A - additional liquidity
        - T+180s: Stage B - broader range, re-center
        - T+300s: Stage C - stability backstop
@@ -595,7 +578,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
      - Confirm timestamp was set successfully
      - Monitor first transaction for 5% fee
      - Track liquidity stage timing
-     - Monitor pool detection system
+     - Monitor pool detection system (rewards only)
      - Alert team of any anomalies
 
 ## Key Implementation Details
@@ -611,17 +594,17 @@ This document outlines the comprehensive development plan for the MIKO token sys
 - Maximum fee: u64::MAX (unlimited)
 - Transfer fee config authority: Vault PDA
 - Withdraw withheld authority: Vault PDA (permanent)
+- **IMPORTANT**: Fees apply to ALL transfers - no exemptions possible
 
-### Dynamic Exclusion System
+### Dynamic Pool Detection System
 - **Pool Detection**:
   - Scan Token-2022 accounts by mint
   - Identify liquidity pool patterns
   - Maintain registry in vault state
   - Update periodically via keeper bot
-- **Router Detection**:
-  - Monitor swap transactions
-  - Identify Jupiter router accounts
-  - Apply temporary exclusions during swaps
+- **Application**:
+  - ONLY for reward distribution exclusions
+  - NOT for transfer fee exemptions (impossible with Token-2022)
 - **Reward Exclusions**:
   - All detected pool accounts
   - System accounts (hardcoded)
@@ -631,6 +614,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
 - High initial liquidity deployment
 - 4-stage liquidity ladder over 5 minutes
 - 5% tax provides sustainable deterrent
+- Tax applies to snipers same as everyone else
 
 ### Launch Liquidity Ladder (Single Wallet)
 - **T0**: Create CPMM pool with substantial liquidity
@@ -638,7 +622,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
 - **+180s**: Stage B - broader range, re-center based on price action
 - **+300s**: Stage C - stability backstop
 - All stages executed from single deployer wallet
-- Detailed parameters documented in LAUNCH_LIQUIDITY_PARAMS.md
+- All operations incur 5% fee
 
 ### Reward Token Schedule
 - **Launch to First Monday**: SOL only
@@ -665,6 +649,7 @@ This document outlines the comprehensive development plan for the MIKO token sys
 - Else:
   - Swap all tax to reward token
   - Distribute: 20% of tax value to owner, 80% of tax value to holders
+- **Note**: All swaps incur 5% fee
 
 ### Holder Eligibility System
 1. Fetch MIKO/USD price from Birdeye
@@ -717,29 +702,7 @@ During early launch phases, there may be no holders meeting the $100 USD thresho
      - Technical issues require manual intervention
    - All withdrawals logged with timestamp and reason
 
-5. **Example Scenario**:
-   ```
-   Cycle 1: 500k MIKO harvested → 0 eligible holders
-            Owner gets 20% (100k MIKO value)
-            80% (400k MIKO value) saved as undistributed
-   
-   Cycle 2: 500k MIKO harvested → 3 eligible holders
-            Total to distribute: 500k + 400k = 900k MIKO value
-            Owner gets 20% of new (100k MIKO value)
-            Holders get 80% of new + all previous (800k MIKO value)
-   ```
-
-6. **Monitoring & Alerts**:
-   - Alert when funds marked as undistributed
-   - Daily report of undistributed balances
-   - Warning if undistributed > 3 cycles old
-   - Critical alert if undistributed > 1M MIKO value
-
-### Smart Exclusion Lists
-- **Fee Exclusions**: 
-  - System accounts (hardcoded)
-  - Dynamically detected pool vaults
-  - Temporarily added router accounts during swaps
+### Smart Reward Distribution Exclusions
 - **Reward Exclusions**: 
   - System accounts (hardcoded)
   - All dynamically detected pool accounts
@@ -758,13 +721,14 @@ During early launch phases, there may be no holders meeting the $100 USD thresho
    - Overflow protection with checked math
    - PDA seed validation
    - Reentrancy prevention
-   - Dynamic exclusion validation
+   - Dynamic pool detection validation
 
 2. **Token Security**
    - Mint authority revoked immediately
    - Freeze authority null from creation
    - Fixed 5% fee (no complex transitions)
    - No ability to modify supply
+   - Accept universal fee application
 
 3. **Bot Security**
    - No private keys except keeper's own
@@ -778,21 +742,21 @@ During early launch phases, there may be no holders meeting the $100 USD thresho
    - Staged liquidity deployment prevents large accumulation
    - MEV protection through batching
    - Slippage controls on swaps
-   - Dynamic exclusions prevent fee loops
+   - Dynamic pool exclusions prevent unfair rewards
 
 ## Testing Strategy
 
 ### Unit Tests
 - Each instruction independently
 - Pool detection algorithms
-- Dynamic exclusion logic
+- Dynamic reward exclusion logic
 - Edge cases (empty lists, zero balances)
 - Authority validations
 
 ### Integration Tests
 - Multi-program interactions
 - Full tax cycle with fixed 5% fee
-- Pool detection and exclusion
+- Pool detection and reward exclusion
 - Staged liquidity deployment
 - Reward token scheduling
 - API mock responses
@@ -801,7 +765,7 @@ During early launch phases, there may be no holders meeting the $100 USD thresho
 - 10,000+ holders
 - Multiple pool creation
 - High-frequency transfers during launch
-- Dynamic exclusion performance
+- Dynamic pool detection performance
 
 ## Monitoring & Maintenance
 
@@ -843,7 +807,7 @@ During early launch phases, there may be no holders meeting the $100 USD thresho
    - Key rotation procedures
    - Bot redundancy (primary/backup)
    - Regular state audits
-   - Dynamic exclusion monitoring
+   - Dynamic pool monitoring
 
 ## Phase Validation Scripts
 
@@ -868,15 +832,15 @@ Each phase must pass validation before proceeding:
 ## Success Criteria
 
 1. **Functional Requirements**
-   - ✅ Fixed 5% transfer fee
-   - ✅ Dynamic exclusion system for pools and routers
+   - ✅ Fixed 5% transfer fee on ALL transfers
+   - ✅ Dynamic pool detection for reward exclusions
    - ✅ High liquidity anti-sniper protection
    - ✅ Threshold-based fee harvesting (500k MIKO)
    - ✅ 20%/80% split logic of collected tax
    - ✅ Tax flow scenarios for keeper SOL management
    - ✅ Initial SOL rewards, then AI-driven selection
    - ✅ $100 minimum holder eligibility
-   - ✅ Smart exclusion lists with pool detection
+   - ✅ Smart reward exclusion lists with pool detection
    - ✅ Emergency withdrawal capabilities
    - ✅ Immutable token (no freeze/mint)
 
@@ -887,7 +851,7 @@ Each phase must pass validation before proceeding:
    - ✅ Anti-sniper protection active
    - ✅ All authorities properly revoked
    - ✅ Edge cases handled (exact 0.05 SOL, swap failures, concurrent harvests)
-   - ✅ Dynamic exclusions prevent fee loops
+   - ✅ Dynamic pool exclusions prevent unfair rewards
 
 3. **Performance Requirements**
    - ✅ Handle 1000+ holders
@@ -903,6 +867,6 @@ Each phase must pass validation before proceeding:
    - ✅ Testing strategy addresses devnet limitations
    - ✅ Tax flow edge cases properly handled
    - ✅ Launch verification applies to both test and production
-   - ✅ Dynamic exclusion system thoroughly tested
+   - ✅ Dynamic pool detection for rewards thoroughly tested
 
-This plan ensures all README.md features are implemented without compromise while maintaining security, phase isolation, robust anti-sniper protection through high liquidity deployment, tax flow scenario handling, dynamic exclusion system, and correct deployment processes.
+This plan ensures all README.md features are implemented without compromise while maintaining security, phase isolation, robust anti-sniper protection through high liquidity deployment, tax flow scenario handling, dynamic pool detection for rewards, and correct deployment processes.

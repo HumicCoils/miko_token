@@ -1,0 +1,41 @@
+{
+  "name": "miko-final-deployment",
+  "version": "1.0.0",
+  "description": "MIKO Token Production Deployment",
+  "scripts": {
+    "generate-keypairs": "ts-node scripts/generate-keypairs.ts",
+    "build-programs": "anchor build",
+    "deploy-programs": "ts-node scripts/deploy-programs.ts",
+    "create-token": "ts-node scripts/create-token.ts",
+    "initialize-vault": "ts-node scripts/initialize-vault.ts",
+    "initialize-smart-dial": "ts-node scripts/initialize-smart-dial.ts",
+    "transfer-authorities": "ts-node scripts/transfer-authorities.ts",
+    "create-pool": "ts-node scripts/create-pool.ts",
+    "add-liquidity": "ts-node scripts/add-liquidity.ts",
+    "revoke-mint": "ts-node scripts/revoke-mint-authority.ts",
+    "start-keeper": "ts-node keeper-bot/src/index.ts",
+    "test": "anchor test"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@jup-ag/api": "^6.0.29",
+    "@pythnetwork/price-service-client": "^1.9.0",
+    "@raydium-io/raydium-sdk-v2": "^0.2.5-alpha",
+    "@solana/spl-token": "^0.4.6",
+    "@solana/web3.js": "^1.95.5",
+    "axios": "^1.7.9",
+    "bs58": "^6.0.0",
+    "decimal.js": "^10.4.3",
+    "dotenv": "^16.4.7",
+    "node-cron": "^3.0.3",
+    "twitter-api-v2": "^1.18.0",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "@types/node-cron": "^3.0.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}

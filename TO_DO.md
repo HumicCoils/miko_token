@@ -3,7 +3,7 @@
 ## Core Development Principles
 
 1. **Programs First, Token Second**: Deploy programs to get IDs before creating token
-2. **Phase Isolation**: Each phase in separate Docker container
+2. **Phase Isolation**: Each phase in separate Docker container (though less critical now)
 3. **No Compromises**: Production-ready architecture with anti-sniper protection
 4. **Shared Artifacts**: Program IDs and critical data shared between phases
 5. **Process Over Details**: Focus on correct order and verification, not specific versions
@@ -41,7 +41,7 @@
 - [x] Update declare_id! with keypair address ✅
 - [x] Implement VaultState with: ✅
   - [x] Multi-token support via mint-based PDA derivation ✅
-  - [x] Dual exclusion lists (fee_exclusions, reward_exclusions) ✅
+  - [x] Reward exclusion list only (no fee exclusions possible) ✅
   - [x] Launch timestamp tracking ✅
   - [x] Harvest threshold (500k MIKO) ✅
   - [x] Pool registry for dynamic detection ✅
@@ -53,7 +53,7 @@
   - [x] `set_launch_time` - Record Raydium pool creation timestamp ✅
   - [x] `harvest_fees` - Using SPL Token harvest instruction ✅
   - [x] `distribute_rewards` - With SOL balance management ✅
-  - [x] `manage_exclusions` - Add/remove from lists ✅
+  - [x] `manage_exclusions` - Add/remove from reward exclusion list ✅
   - [x] `update_pool_registry` - Dynamic pool detection ✅
   - [x] `update_config` - Modify vault parameters ✅
   - [x] `emergency_withdraw_vault` - Withdraw tokens/SOL ✅
@@ -162,14 +162,14 @@
   - [x] Initialize vault with all parameters ✅
   - [x] Initialize empty pool registry ✅
   - [x] Verify PDA created successfully ✅
-  - [x] Verify auto-exclusions applied: ✅
+  - [x] Verify auto-exclusions applied to reward list: ✅
     - [x] Owner wallet excluded ✅
     - [x] Keeper wallet excluded ✅
     - [x] Vault program excluded ✅
     - [x] Vault PDA excluded ✅
   - [x] **VC:3.VAULT_EXCLUSIONS** ✅
     - [x] Query vault account data ✅
-    - [x] Verify all system accounts in both exclusion lists ✅
+    - [x] Verify all system accounts in reward exclusion list ✅
     - [x] Write `verification/vc3-vault-exclusions.json` ✅
     - [x] PASS required before Step 2 ✅ PASSED
 
@@ -220,7 +220,7 @@
 ### Phase 3 Testing
 - [x] Test fixed 5% fee collection ✅
 - [x] Test vault can harvest fees with PDA signature ✅
-- [x] Verify exclusion lists work correctly ✅
+- [x] Verify reward exclusion list works correctly ✅
 - [x] Verify all authorities properly transferred ✅
 - [x] Run full integration test suite ✅
 
@@ -245,13 +245,7 @@
   - [x] Implement pool scanning algorithm
   - [x] Test with mock pools
   - [x] Verify detection accuracy
-  - [x] Update vault pool registry
-
-- [x] **Router Account Detection** ✅ TESTED
-  - [x] Monitor swap transactions
-  - [x] Identify router accounts
-  - [x] Apply temporary exclusions
-  - [x] Test exclusion effectiveness
+  - [x] Update vault pool registry (rewards only)
 
 - [x] **Twitter Monitor** (Active after first Monday) ✅ TESTED
   - [x] Calculate first Monday after launch
@@ -274,21 +268,21 @@
   - [x] Select the one with highest 24h volume
   - [x] Update Smart Dial program with selected token
 
-- [x] **Fee Harvester with Dynamic Exclusions** ✅ TESTED
+- [x] **Fee Harvester** ✅ TESTED
   - [x] Query all MIKO token accounts
   - [x] Calculate total withheld fees
-  - [x] Exclude pool accounts from harvest
   - [x] Monitor for 500k MIKO threshold
   - [x] Batch accounts for efficient harvesting
   - [x] Call vault's harvest_fees when threshold reached
   - [x] Trigger swap and distribution after harvest
+  - [x] Accept 5% fee on harvest operations
 
 - [x] **Swap Manager** ✅ TESTED
   - [x] Integrate Jupiter API (mock)
   - [x] Handle tax splitting (20% to owner, 80% to holders)
   - [x] Manage SOL balance for keeper operations
   - [x] Execute swaps with slippage protection
-  - [x] Apply router exclusions during swaps
+  - [x] Accept 5% fee on all swaps
 
 - [x] **Distribution Engine with Pool Exclusions** ✅ TESTED
   - [x] Query holders via Birdeye API (mock)
@@ -320,7 +314,7 @@
   - [x] Verify program reachability ✅
   - [x] Write `verification/vc4-keeper-preflight.json` ✅ PASSED
 
-### Phase 4-B: Local-Fork Simulation ⏳ AWAITING 4-A
+### Phase 4-B: Local-Fork Simulation 🔄 IN PROGRESS
 
 **Testing Approach**: Use Local Mainnet-Fork as documented in testing_strategy.md Section 3
 
@@ -338,14 +332,14 @@
 - [x] Create launch coordination script with: ✅
   - [x] Pre-launch checklist verification ✅
   - [x] Raydium CPMM pool creation function ✅
-  - [x] Launch Liquidity Ladder execution logic (refer to LAUNCH_LIQUIDITY_PARAMS.md) ✅
+  - [x] Launch Liquidity Ladder execution logic ✅
   - [x] Immediate launch timestamp setter ✅
   - [x] Pool detection initialization ✅
   - [x] Keeper bot startup trigger ✅
   - [x] Oracle price fetch requirement ✅
   - [x] Distribution Engine V2 integration ✅
   - [x] Emergency withdrawal functions ✅
-- [x] Prepare Launch Preflight Package (using LAUNCH_LIQUIDITY_PARAMS.md): ✅
+- [x] Prepare Launch Preflight Package: ✅
   - [x] Token pair: MIKO/SOL ✅
   - [x] Raydium fee tier choice (0.25% standard) ✅
   - [x] Initial price calculation ✅ (based on oracle price)
@@ -354,7 +348,23 @@
   - [x] Stage B amount (+180s): 270M MIKO + 3.0 SOL ✅
   - [x] Stage C amount (+300s): 360M MIKO + 4.0 SOL ✅
 
-#### Local-Fork Testing
+#### Critical Issues to Fix Before Testing
+- [ ] **Fix Token Creation Parameters**:
+  - [ ] Create new token with 5% fee (not 30%)
+  - [ ] Set maximum fee to u64::MAX (not 10 MIKO)
+  - [ ] Ensure proper token configuration
+  
+- [ ] **Fix Authority Issues**:
+  - [ ] Ensure keeper_authority is properly separated from deployer
+  - [ ] Fix module keypair consistency
+  - [ ] Ensure all modules use same operational keypair
+
+- [ ] **Implement Pool Detection**:
+  - [ ] Dynamic pool detection for reward exclusions
+  - [ ] Update exclusion lists before distributions
+  - [ ] Test with multiple pool types
+
+#### Local-Fork Testing (After Fixes)
 - [ ] Create CPMM pool at T0
 - [ ] Execute Launch Liquidity Ladder:
   - [ ] T+60s: Stage A liquidity add
@@ -368,26 +378,25 @@
   - [ ] Create test pools
   - [ ] Verify detection algorithm works
   - [ ] Confirm pools added to registry
-  - [ ] Verify pools excluded from harvest
+  - [ ] Verify pools excluded from rewards (not fees)
 - [ ] Test Harvest → Swap → Distribute cycle:
   - [ ] Generate transfers to accumulate 500k MIKO
-  - [ ] Verify pool accounts excluded
-  - [ ] Execute harvest with exclusions
-  - [ ] Test Jupiter swap with router exclusions
+  - [ ] Execute harvest (accept 5% fee)
+  - [ ] Test Jupiter swap (accept 5% fee)
   - [ ] Distribute rewards excluding pools
 - [ ] Test First Monday token change
-- [ ] **VC:4.DYNAMIC_EXCLUSIONS**
+- [ ] **VC:4.DYNAMIC_POOL_DETECTION**
   - [ ] Verify pool detection works correctly
-  - [ ] Verify router accounts excluded during swaps
+  - [ ] Verify pools excluded from rewards only
   - [ ] Test exclusion persistence
-  - [ ] Write `verification/vc4-dynamic-exclusions.json`
+  - [ ] Write `verification/vc4-dynamic-pool-detection.json`
   - [ ] PASS required before Phase 5
 - [ ] **VC:4.LOCAL_FORK_PASS**
   - [ ] Verify full launch path on local mainnet-fork
   - [ ] Test pool creation and 4-stage liquidity ladder
   - [ ] Verify fixed 5% fee (no transitions)
   - [ ] Test complete tax flow with real Jupiter swap
-  - [ ] Verify all dynamic exclusions work
+  - [ ] Verify pool exclusions work (rewards only)
   - [ ] Write `verification/vc4-local-fork.json`
   - [ ] PASS required before Phase 5
 
@@ -409,17 +418,17 @@
 - [ ] Monitor 5% fixed fee collection:
   - [ ] Verify fee active from start
   - [ ] Confirm no changes occur
-- [ ] Test dynamic exclusions in production:
+- [ ] Test dynamic pool detection for rewards:
   - [ ] Create additional pools
   - [ ] Verify detection works
-  - [ ] Confirm exclusions applied
+  - [ ] Confirm reward exclusions applied
 - [ ] Execute Tax → Swap → Distribute cycle
 - [ ] Run for minimum 30 minutes
 - [ ] Execute at least 2 harvest cycles
 
 ### Canary Validation
 - [ ] All systems functioning correctly
-- [ ] Dynamic exclusions working properly
+- [ ] Dynamic pool exclusions working properly (rewards only)
 - [ ] No manual interventions required
 - [ ] Ready for production scale-up
 
@@ -429,7 +438,7 @@
 - [ ] All tests passing
 - [ ] All program IDs verified (declared = deployed)
 - [ ] Anti-sniper features verified
-- [ ] Dynamic exclusion system tested
+- [ ] Dynamic pool detection tested (rewards only)
 - [ ] Tax flow scenarios tested
 - [ ] Security audit complete
 - [ ] Documentation finalized
@@ -458,7 +467,7 @@
 
 ### Launch Execution
 - [ ] Verify deployer wallet has all liquidity funds
-- [ ] Create Raydium CPMM pool with bootstrap liquidity (refer to LAUNCH_LIQUIDITY_PARAMS.md)
+- [ ] Create Raydium CPMM pool with bootstrap liquidity
 - [ ] Execute Launch Liquidity Ladder:
   - [ ] T0: Bootstrap with 45M MIKO + 0.5 SOL
   - [ ] +60s: Stage A - 225M MIKO + 2.5 SOL
@@ -468,22 +477,22 @@
   - [ ] Verify each deployment within ±5 seconds
   - [ ] Write `verification/vc-launch-liquidity-mainnet.json`
 - [ ] Set launch timestamp IMMEDIATELY
-- [ ] Start keeper bot with dynamic exclusion monitoring
+- [ ] Start keeper bot with dynamic pool detection monitoring
 - [ ] Monitor:
-  - [ ] 5% fixed fee collection
-  - [ ] Pool detection system
+  - [ ] 5% fixed fee collection on ALL transfers
+  - [ ] Pool detection system (rewards only)
   - [ ] Harvest/swap/distribute cycles
 - [ ] Monitor first 24 hours
 
 ### Success Metrics
 - [ ] Snipers effectively deterred
-- [ ] Fixed 5% fee working correctly
-- [ ] Dynamic exclusions functioning
+- [ ] Fixed 5% fee working correctly on ALL transfers
+- [ ] Dynamic pool exclusions functioning (rewards only)
 - [ ] Program IDs all match (declared = deployed)
 - [ ] Zero manual interventions required
 - [ ] All fees harvested at threshold
 - [ ] Rewards distributed after each harvest
-- [ ] Pools properly excluded
+- [ ] Pools properly excluded from rewards
 - [ ] No security incidents
 
 ## Critical Checkpoints
@@ -512,7 +521,7 @@ Before proceeding to next phase, verify:
 - Mint authority revoked
 - Tokens distributed to proper wallets
 - Vault can harvest with PDA signature
-- System accounts excluded
+- System accounts excluded from rewards
 - SOL set as initial reward
 
 **After Phase 4-A**:
@@ -520,19 +529,19 @@ Before proceeding to next phase, verify:
 - Mock tests passing
 - Edge cases handled
 - Tax flow scenarios tested
-- Dynamic exclusion logic ready
+- Dynamic pool detection logic ready
 
 **After Phase 4-B**:
 - Local-Fork tests passing
 - Launch script ready
 - Real DEX integration verified
 - Fixed 5% fee working
-- Dynamic exclusions tested
+- Dynamic pool exclusions tested (rewards only)
 
 **After Phase 5**:
 - Mainnet Canary successful
 - Multiple harvest cycles completed
-- Dynamic exclusions working in production
+- Dynamic pool exclusions working in production
 - All VCs passed
 
 ## Common Issues and Solutions
@@ -546,8 +555,8 @@ Before proceeding to next phase, verify:
 7. **Liquidity Staging**: Deployer wallet controls all deployments
 8. **Docker Networking**: Use shared-artifacts for data
 9. **Rate Limits**: Implement proper retry logic
-10. **Dynamic Exclusions**: Test thoroughly on local fork
-11. **Pool Detection**: Verify algorithm catches all pool types
+10. **Dynamic Pool Detection**: Test thoroughly on local fork (rewards only)
+11. **Fee Application**: Accept 5% on ALL transfers - no exemptions
 12. **Maximum Fee**: Must be u64::MAX for unlimited
 
 ## Launch Day Checklist
@@ -557,10 +566,10 @@ Before proceeding to next phase, verify:
 - [ ] All programs initialized (PDAs exist)
 - [ ] All authorities transferred correctly
 - [ ] Deployer wallet has liquidity funds ready
-- [ ] Keeper bot running with dynamic exclusion monitoring
+- [ ] Keeper bot running with dynamic pool detection monitoring
 - [ ] Launch script tested and ready
 - [ ] Team ready for staged deployment
 - [ ] Monitoring dashboard active
 - [ ] Emergency procedures documented
 
-This checklist ensures a perfect, production-ready implementation with fixed 5% fee and dynamic exclusion system.
+This checklist ensures a perfect, production-ready implementation with fixed 5% fee on all transfers and dynamic pool exclusion system for rewards only.

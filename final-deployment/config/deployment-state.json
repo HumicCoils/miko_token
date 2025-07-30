@@ -1,0 +1,61 @@
+{
+  "vault_program_id": "7daWcdqpqm83EE2UWJ7pzJduKuPRabZnWGZiyvVLxAKe",
+  "smart_dial_program_id": "G5tDVi8om2TRPz83qHJzGKYeXHtQTXnxtL3qM12yvYBS",
+  "token_mint": "9Az6Gyirq8U8A1STnHCKCrdi6LRN4TfwHbcYgULR7x6g",
+  "token_creation_signature": "KKY3pv1LhUtn4baxmykeUDfbBEKano4R5zZGtWDVKAykiaNqS1E7Tqya3PoBuNXWJAcdt3gE7fMDUUDcmpZkDfe",
+  "token_mint_signature": "47C8q2Q573jYP7Qc3msqQSwgpoygYzpBohQUn8F9JXZECKqkvBaSfn9VZopmLcPYg33gWSZt1exoon5udh2maYd2",
+  "deployer_token_account": "BzwjCydWad9zC85EcCB9Xai5t4kb3ySMetC4ryVBupKW",
+  "token_created_at": "2025-07-30T12:17:45.927Z",
+  "vault_deployment_signature": "7daWcdqpqm83EE2UWJ7pzJduKuPRabZnWGZiyvVLxAKe",
+  "smart_dial_deployment_signature": "G5tDVi8om2TRPz83qHJzGKYeXHtQTXnxtL3qM12yvYBS",
+  "vault_initialized": true,
+  "vault_init_signature": "3ySSnsB1b6M29xWPVbm1sYJ2Dh4aLdwDXFd3BFQ6FGSJtiNA4VsZJ3UtUo3TaPRpDz3P7wpn5yJtQMmtJdhfEwM4",
+  "smart_dial_initialized": true,
+  "smart_dial_init_signature": "5yTGttXbrxGwFTiYY69puFvNEL8xpQBSYwPDttHdwbyKHKbMmK2fPoWjyep2U6pSfAJQp9jgt8G64R7gnSnAvqek",
+  "authorities_transferred": true,
+  "transfer_timestamp": "2025-07-30T13:18:57.578Z",
+  "pool_created": true,
+  "pool_id": "3rpkZ394pXMo3KmFy9Mm9iRUxzzgSp6s3VV7su3GiQgt",
+  "pool_info": {
+    "poolId": "3rpkZ394pXMo3KmFy9Mm9iRUxzzgSp6s3VV7su3GiQgt",
+    "mintA": "9Az6Gyirq8U8A1STnHCKCrdi6LRN4TfwHbcYgULR7x6g",
+    "mintB": "So11111111111111111111111111111111111111112",
+    "feeRate": 0.0025,
+    "createdAt": "2025-07-30T14:19:17.116Z",
+    "signature": "3u3VkCeWpa8uGhsvSxB1KxnjHuoaCwWJFjQbvtBFyPHVQVhvK8ubWDZcvwNNc2HM5Xou4GgSfHDwjnJ27UMwJeRW",
+    "bootstrapStage": {
+      "mikoAmount": 45000000,
+      "solAmount": 0.5,
+      "solPrice": 190,
+      "initialPricePerMiko": 1.1111111111111112e-8,
+      "initialFdv": 2111.111111111111,
+      "txSig": "3u3VkCeWpa8uGhsvSxB1KxnjHuoaCwWJFjQbvtBFyPHVQVhvK8ubWDZcvwNNc2HM5Xou4GgSfHDwjnJ27UMwJeRW",
+      "timestamp": "2025-07-30T14:19:17.116Z"
+    }
+  },
+  "launch_time": "2025-07-30T14:19:17.116Z",
+  "liquidity_stages": {
+    "A": {
+      "completed": true,
+      "signature": "2Ej4TegQuFp7S6xYVqQfE9wm8evig4Yme7Qw4ejYCwfEEZrfq9bcQ6sYbPWzBPZqkrpvz9neEYhfpqM2ni622fjG",
+      "slot": 23579,
+      "timestamp": "2025-07-30T14:49:31.040Z",
+      "mikoAmount": 225000000,
+      "solAmount": 2.5,
+      "executedAt": "+60s",
+      "priceImpact": 0.9999999867777778,
+      "slippageTolerance": 0.01
+    },
+    "B": {
+      "completed": true,
+      "signature": "2cMvLqBH8WraNWvgj92T2fswA5cvPiFBNenA4W8vFtCjSAH17JZqFcqwWzq4YpFic2128ftU5h53rQrF9vZrZrHs",
+      "slot": 23916,
+      "timestamp": "2025-07-30T14:51:47.292Z",
+      "mikoAmount": 270000000,
+      "solAmount": 3,
+      "executedAt": "+180s",
+      "priceImpact": 0.9999999798148151,
+      "slippageTolerance": 0.01
+    }
+  }
+}

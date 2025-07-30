@@ -1,0 +1,20 @@
+{
+  "network": "localnet",
+  "rpcUrl": "http://localhost:8899",
+  "commitment": "confirmed",
+  "tokenConfig": {
+    "name": "MIKO",
+    "symbol": "MIKO",
+    "decimals": 9,
+    "totalSupply": 1000000000,
+    "transferFeeBps": 500,
+    "maximumFee": "18446744073709551615"
+  },
+  "vaultConfig": {
+    "minHoldAmount": 1000000000,
+    "harvestThreshold": "500000000000000"
+  },
+  "priorityFee": {
+    "microLamports": 5000
+  }
+}
