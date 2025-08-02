@@ -197,30 +197,28 @@ pub mod absolute_vault {
         // Update vault state
         let vault = &mut ctx.accounts.vault;
         vault.total_fees_harvested = vault.total_fees_harvested.saturating_add(withdrawn_amount);
+        vault.last_harvest_amount = withdrawn_amount;
+        vault.last_harvest_time = Clock::get()?.unix_timestamp;
         
         msg!("Withdrew {} fees from mint to vault", withdrawn_amount);
         
         Ok(())
     }
 
-    /// Distribute rewards - transfers 20% to owner (keeper only)
-    /// The 80% for holders is handled by keeper bot off-chain
-    pub fn distribute_rewards(
-        ctx: Context<DistributeRewards>,
-        owner_amount: u64,
-        total_amount: u64,
+    /// Withdraw harvested fees to keeper for processing (keeper only)
+    /// Keeper handles all swaps and distributions according to tax flow rules
+    pub fn withdraw_harvested_fees(
+        ctx: Context<WithdrawHarvestedFees>,
+        amount: u64,
     ) -> Result<()> {
-        // Verify correct split: 20% to owner
-        let expected_owner_amount = total_amount
-            .checked_mul(OWNER_TAX_SHARE)
-            .ok_or(VaultError::MathOverflow)?
-            .checked_div(100)
-            .ok_or(VaultError::MathOverflow)?;
+        let vault = &ctx.accounts.vault;
         
-        require!(
-            owner_amount == expected_owner_amount,
-            VaultError::InvalidDistributionSplit
-        );
+        let seeds = &[
+            VAULT_SEED,
+            vault.token_mint.as_ref(),
+            &[ctx.bumps.vault]
+        ];
+        let signer_seeds = &[&seeds[..]];
         
         // Get mint decimals
         let mint_data = ctx.accounts.token_mint.to_account_info();
@@ -229,29 +227,19 @@ pub mod absolute_vault {
         let decimals = mint_info.base.decimals;
         drop(mint_data_borrowed);
         
-        // Get token mint key from vault
-        let token_mint_key = ctx.accounts.vault.token_mint;
-        
-        // Transfer owner's share
-        let seeds = &[
-            VAULT_SEED,
-            token_mint_key.as_ref(),
-            &[ctx.bumps.vault]
-        ];
-        let signer_seeds = &[&seeds[..]];
-        
+        // Transfer harvested fees to keeper
         token_2022::transfer_checked(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 token_2022::TransferChecked {
                     from: ctx.accounts.vault_token_account.to_account_info(),
                     mint: ctx.accounts.token_mint.to_account_info(),
-                    to: ctx.accounts.owner_token_account.to_account_info(),
+                    to: ctx.accounts.keeper_token_account.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
                 },
                 signer_seeds,
             ),
-            owner_amount,
+            amount,
             decimals,
         )?;
         
@@ -259,9 +247,42 @@ pub mod absolute_vault {
         let vault = &mut ctx.accounts.vault;
         vault.last_distribution_time = Clock::get()?.unix_timestamp;
         vault.total_rewards_distributed = vault.total_rewards_distributed
-            .saturating_add(total_amount);
+            .saturating_add(amount);
         
-        msg!("Distributed {} to owner (20% of {})", owner_amount, total_amount);
+        msg!("Withdrew {} tokens to keeper for processing", amount);
+        
+        Ok(())
+    }
+    
+    /// Log keeper work on-chain (keeper only)
+    /// Records swap and distribution activities for transparency
+    pub fn log_keeper_work(
+        ctx: Context<LogKeeperWork>,
+        work_type: KeeperWorkType,
+        amount: u64,
+        details: String,
+    ) -> Result<()> {
+        let log = &mut ctx.accounts.keeper_work_log;
+        
+        // Initialize if new
+        if log.vault == Pubkey::default() {
+            log.vault = ctx.accounts.vault.key();
+            log.entries = Vec::new();
+        }
+        
+        // Add new entry (keep last 50 entries)
+        log.entries.push(KeeperWorkEntry {
+            timestamp: Clock::get()?.unix_timestamp,
+            work_type,
+            amount,
+            details: details.chars().take(100).collect(), // Limit details to 100 chars
+        });
+        
+        if log.entries.len() > 50 {
+            log.entries.remove(0);
+        }
+        
+        msg!("Logged keeper work: {:?}", work_type);
         
         Ok(())
     }
@@ -528,7 +549,7 @@ pub struct WithdrawFeesFromMint<'info> {
 }
 
 #[derive(Accounts)]
-pub struct DistributeRewards<'info> {
+pub struct WithdrawHarvestedFees<'info> {
     #[account(
         mut,
         seeds = [VAULT_SEED, vault.token_mint.as_ref()],
@@ -546,9 +567,29 @@ pub struct DistributeRewards<'info> {
     pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
     
     #[account(mut)]
-    pub owner_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub keeper_token_account: InterfaceAccount<'info, TokenAccount>,
     
     pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct LogKeeperWork<'info> {
+    #[account(
+        mut,
+        seeds = [b"keeper_log", vault.key().as_ref()],
+        bump,
+        space = 8 + KeeperWorkLog::INIT_SPACE
+    )]
+    pub keeper_work_log: Account<'info, KeeperWorkLog>,
+    
+    #[account(
+        constraint = vault.keeper_authority == keeper_authority.key() @ VaultError::Unauthorized
+    )]
+    pub vault: Account<'info, VaultState>,
+    
+    pub keeper_authority: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -636,8 +677,26 @@ pub struct VaultState {
     pub total_rewards_distributed: u64,
     pub pending_withheld: u64,
     pub last_harvest_time: i64,
+    pub last_harvest_amount: u64,
     pub last_distribution_time: i64,
     pub launch_timestamp: i64,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct KeeperWorkLog {
+    pub vault: Pubkey,
+    #[max_len(50)]
+    pub entries: Vec<KeeperWorkEntry>,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
+pub struct KeeperWorkEntry {
+    pub timestamp: i64,
+    pub work_type: KeeperWorkType,
+    pub amount: u64,
+    #[max_len(100)]
+    pub details: String,
 }
 
 #[account]
@@ -654,6 +713,15 @@ pub struct PoolRegistry {
 pub enum ExclusionAction {
     Add,
     Remove,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
+pub enum KeeperWorkType {
+    HarvestFees,
+    SwapToRewardToken,
+    DistributeToOwner,
+    DistributeToHolders,
+    KeeperTopUp,
 }
 
 // Errors
