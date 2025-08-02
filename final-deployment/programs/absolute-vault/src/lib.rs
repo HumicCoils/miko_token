@@ -575,7 +575,8 @@ pub struct WithdrawHarvestedFees<'info> {
 #[derive(Accounts)]
 pub struct LogKeeperWork<'info> {
     #[account(
-        mut,
+        init_if_needed,
+        payer = keeper_authority,
         seeds = [b"keeper_log", vault.key().as_ref()],
         bump,
         space = 8 + KeeperWorkLog::INIT_SPACE
@@ -587,6 +588,7 @@ pub struct LogKeeperWork<'info> {
     )]
     pub vault: Account<'info, VaultState>,
     
+    #[account(mut)]
     pub keeper_authority: Signer<'info>,
     
     pub system_program: Program<'info, System>,

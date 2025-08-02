@@ -229,10 +229,6 @@ export class KeeperBot {
     const solMint = new PublicKey('So11111111111111111111111111111111111111112');
     const isRewardSol = rewardToken.equals(solMint);
     
-    // Calculate base distribution amounts (20% owner, 80% holders)
-    let ownerAmount = Math.floor(harvestResult.amount * this.config.distribution.owner_percent / 100);
-    let holdersAmount = harvestResult.amount - ownerAmount;
-    
     // Handle keeper SOL top-up if needed
     if (keeperNeedsSol) {
       const targetBalance = 0.10 * LAMPORTS_PER_SOL; // Target 0.10 SOL
@@ -248,72 +244,73 @@ export class KeeperBot {
       // Note: We'll handle keeper top-up after swapping to appropriate token
     }
     
-    // 8. Tax flow implementation with proper swaps
+    // 8. Withdraw all harvested fees to keeper for processing
+    this.logger.info('Withdrawing harvested fees to keeper', {
+      amount: harvestResult.amount / 1e9
+    });
+    
+    // Ensure keeper has MIKO token account
+    const keeperMikoAccount = getAssociatedTokenAddressSync(
+      this.tokenMint,
+      this.keeper.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID
+    );
+    
+    // Check if account exists, create if not
+    const keeperMikoInfo = await this.connection.getAccountInfo(keeperMikoAccount);
+    if (!keeperMikoInfo) {
+      const { createAssociatedTokenAccountInstruction } = await import('@solana/spl-token');
+      const createIx = createAssociatedTokenAccountInstruction(
+        this.keeper.publicKey,
+        keeperMikoAccount,
+        this.keeper.publicKey,
+        this.tokenMint,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const createTx = new anchor.web3.Transaction().add(createIx);
+      await sendAndConfirmTransaction(
+        this.connection,
+        createTx,
+        [this.keeper],
+        { commitment: 'confirmed' }
+      );
+    }
+    
+    // Withdraw all harvested fees to keeper
+    const withdrawTx = await this.vaultProgram.methods
+      .withdrawHarvestedFees(new BN(Math.floor(harvestResult.amount)))
+      .accounts({
+        vault: this.vaultPda,
+        keeperAuthority: this.keeper.publicKey,
+        tokenMint: this.tokenMint,
+        vaultTokenAccount: getAssociatedTokenAddressSync(
+          this.tokenMint,
+          this.vaultPda,
+          true,
+          TOKEN_2022_PROGRAM_ID
+        ),
+        keeperTokenAccount: keeperMikoAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+      
+    this.logger.info('Withdrew all harvested fees to keeper', {
+      signature: withdrawTx,
+      amount: harvestResult.amount / 1e9
+    });
+    
+    // 9. Handle tax flow scenarios
     if (isRewardSol) {
-      // Scenario 1: Reward token is SOL - swap ALL MIKO to SOL first
-      this.logger.info('Reward token is SOL, swapping all harvested MIKO to SOL', {
+      // Scenario 1: Reward token is SOL - swap all MIKO to SOL
+      this.logger.info('Reward token is SOL, swapping all MIKO to SOL', {
         mikoAmount: harvestResult.amount / 1e9
       });
       
-      // First ensure keeper has MIKO token account
-      const keeperMikoAccount = getAssociatedTokenAddressSync(
-        this.tokenMint,
-        this.keeper.publicKey,
-        false,
-        TOKEN_2022_PROGRAM_ID
-      );
-      
-      // Check if account exists, create if not
-      const keeperMikoInfo = await this.connection.getAccountInfo(keeperMikoAccount);
-      if (!keeperMikoInfo) {
-        const { createAssociatedTokenAccountInstruction } = await import('@solana/spl-token');
-        const createIx = createAssociatedTokenAccountInstruction(
-          this.keeper.publicKey,
-          keeperMikoAccount,
-          this.keeper.publicKey,
-          this.tokenMint,
-          TOKEN_2022_PROGRAM_ID
-        );
-        const createTx = new anchor.web3.Transaction().add(createIx);
-        await sendAndConfirmTransaction(
-          this.connection,
-          createTx,
-          [this.keeper],
-          { commitment: 'confirmed' }
-        );
-      }
-      
-      // Transfer owner's 20% MIKO to keeper first
-      const transferTx = await this.vaultProgram.methods
-        .distributeRewards(
-          new BN(Math.floor(ownerAmount)),     // 20% to owner (keeper for now)
-          new BN(Math.floor(harvestResult.amount))  // Total amount
-        )
-        .accounts({
-          vault: this.vaultPda,
-          keeperAuthority: this.keeper.publicKey,
-          tokenMint: this.tokenMint,
-          vaultTokenAccount: getAssociatedTokenAddressSync(
-            this.tokenMint,
-            this.vaultPda,
-            true,
-            TOKEN_2022_PROGRAM_ID
-          ),
-          ownerTokenAccount: keeperMikoAccount, // Send to keeper for swapping
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-        })
-        .rpc();
-      
-      this.logger.info('Transferred owner portion MIKO to keeper', {
-        signature: transferTx,
-        amount: ownerAmount / 1e9
-      });
-      
-      // Swap owner's 20% MIKO to SOL
-      const ownerSwapResult = await this.swapService.swapTokens(
+      const swapResult = await this.swapService.swapTokens(
         this.tokenMint,
         solMint,
-        ownerAmount,
+        harvestResult.amount,
         this.keeper.publicKey
       );
       
@@ -328,7 +325,7 @@ export class KeeperBot {
         solOut: totalSol / LAMPORTS_PER_SOL
       });
       
-      // Now distribute the SOL according to rules
+      // Calculate distribution amounts
       let keeperSolAmount = 0;
       let ownerSolAmount = Math.floor(totalSol * this.config.distribution.owner_percent / 100);
       let holdersSolAmount = totalSol - ownerSolAmount;
@@ -384,9 +381,18 @@ export class KeeperBot {
       );
       
     } else {
-      // Reward is NOT SOL
+      // Scenario 2: Reward token is NOT SOL
+      this.logger.info('Reward token is not SOL, handling MIKO distribution', {
+        rewardToken: rewardToken.toBase58(),
+        mikoAmount: harvestResult.amount / 1e9
+      });
+      
+      // Calculate base distribution
+      let ownerMikoAmount = Math.floor(harvestResult.amount * this.config.distribution.owner_percent / 100);
+      let holdersMikoAmount = harvestResult.amount - ownerMikoAmount;
+      
       if (keeperNeedsSol) {
-        // Scenario 2: Swap part of owner's 20% to SOL for keeper
+        // Need to swap some of owner's MIKO to SOL for keeper
         const targetBalance = 0.10 * LAMPORTS_PER_SOL;
         const neededSol = Math.max(0, targetBalance - keeperBalance);
         
@@ -394,45 +400,10 @@ export class KeeperBot {
         const solPrice = await this.pythClient.getSolPrice();
         const mikoPrice = await this.birdeyeClient.getTokenPrice(this.tokenMint.toBase58());
         const mikoForSol = Math.ceil((neededSol / LAMPORTS_PER_SOL) * solPrice / mikoPrice * 1.1 * 1e9);
-        const keeperMikoAmount = Math.min(ownerAmount, mikoForSol);
+        const keeperMikoAmount = Math.min(ownerMikoAmount, mikoForSol);
         
         if (keeperMikoAmount > 0) {
-          // Transfer MIKO to keeper for swap
-          const keeperMikoAccount = getAssociatedTokenAddressSync(
-            this.tokenMint,
-            this.keeper.publicKey,
-            false,
-            TOKEN_2022_PROGRAM_ID
-          );
-          
-          const transferTx = await this.vaultProgram.methods
-            .distributeRewards(
-              new BN(Math.floor(keeperMikoAmount)),
-              new BN(Math.floor(harvestResult.amount))
-            )
-            .accounts({
-              vault: this.vaultPda,
-              keeperAuthority: this.keeper.publicKey,
-              tokenMint: this.tokenMint,
-              vaultTokenAccount: getAssociatedTokenAddressSync(
-                this.tokenMint,
-                this.vaultPda,
-                true,
-                TOKEN_2022_PROGRAM_ID
-              ),
-              ownerTokenAccount: keeperMikoAccount,
-              tokenProgram: TOKEN_2022_PROGRAM_ID,
-            })
-            .transaction();
-          
-          await sendAndConfirmTransaction(
-            this.connection,
-            transferTx,
-            [this.keeper],
-            { commitment: 'confirmed' }
-          );
-          
-          // Swap MIKO to SOL
+          // Swap some MIKO to SOL for keeper
           const swapResult = await this.swapService.swapTokens(
             this.tokenMint,
             solMint,
@@ -448,16 +419,16 @@ export class KeeperBot {
           }
           
           // Adjust owner amount
-          ownerAmount = ownerAmount - keeperMikoAmount;
+          ownerMikoAmount = ownerMikoAmount - keeperMikoAmount;
         }
       }
       
       // Swap remaining owner portion to reward token
-      if (ownerAmount > 0) {
+      if (ownerMikoAmount > 0) {
         const ownerSwapResult = await this.swapService.swapMikoForToken(
           this.tokenMint,
           rewardToken,
-          ownerAmount
+          ownerMikoAmount
         );
         
         if (ownerSwapResult.success) {
@@ -517,7 +488,7 @@ export class KeeperBot {
       const holdersSwapResult = await this.swapService.swapMikoForToken(
         this.tokenMint,
         rewardToken,
-        holdersAmount
+        holdersMikoAmount
       );
       
       if (!holdersSwapResult.success) {
@@ -530,19 +501,18 @@ export class KeeperBot {
       this.holderDistributor.setOwnerWallet(vaultState.ownerWallet);
       
       await this.holderDistributor.distributeToHolders(
-        holdersAmount,
+        0, // No MIKO amount (already swapped)
         holdersSwapResult.outputAmount,
         rewardToken,
-        this.vaultPda
+        this.keeper.publicKey // Distribute from keeper
       );
     }
     
     const duration = timer();
     this.logger.info('Keeper cycle completed', {
       duration: `${duration}ms`,
-      totalDistributed: harvestResult.amount / 1e9,
-      ownerAmount: ownerAmount / 1e9,
-      holdersAmount: holdersAmount / 1e9
+      totalHarvested: harvestResult.amount / 1e9,
+      rewardToken: rewardToken.toBase58()
     });
     
     // Log metrics

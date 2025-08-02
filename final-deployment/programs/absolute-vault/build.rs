@@ -15,7 +15,7 @@ fn main() {
             .expect("Failed to read keypair file");
         let keypair_bytes: Vec<u8> = serde_json::from_str(&keypair_data)
             .expect("Failed to parse keypair JSON");
-        let keypair = Keypair::from_bytes(&keypair_bytes)
+        let keypair = Keypair::try_from(&keypair_bytes[..])
             .expect("Failed to create keypair from bytes");
         
         // Write the program ID to a file that will be included
