@@ -21,11 +21,11 @@ export class TwitterMonitor {
   private isRunning: boolean = false;
   private selectedToken: PublicKey | null = null;
   private lastUpdateTime: Date | null = null;
-  private checkInterval: NodeJS.Timer | null = null;
+  private checkInterval: NodeJS.Timeout | null = null;
   private credentials: TwitterApiCredentials;
   
   // Default to SOL
-  private readonly SOL_MINT = new PublicKey('So11111111111111111111111111111111111112');
+  private readonly SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
   
   constructor(config: any, logger: Logger) {
     this.config = config;

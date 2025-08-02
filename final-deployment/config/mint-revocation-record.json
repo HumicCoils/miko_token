@@ -1,0 +1,9 @@
+{
+  "network": "localnet",
+  "token_mint": "HJ9N975hkme7vdEni7DFapYiW3xvUhoHrn8wLycjezVy",
+  "revoked_by": "8X6ySemM8mJufhcGioSzC1ppFHyFQSdAtiiYJFg9r2xo",
+  "signature": "2xRQ1PZ1EBMu1xx98jWFzYGJ4GRCVkW8x8ytkVw5CAeBhFqRwBj9BdQGQtsQ5AizA5ANjLyEFDzxxwBDJfaLbX8X",
+  "timestamp": "2025-08-01T23:26:49.485Z",
+  "final_supply": "1000000000000000000",
+  "final_supply_formatted": "1,000,000,000 MIKO"
+}

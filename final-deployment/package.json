@@ -13,6 +13,7 @@
     "create-pool": "ts-node scripts/create-pool.ts",
     "add-liquidity": "ts-node scripts/add-liquidity.ts",
     "revoke-mint": "ts-node scripts/revoke-mint-authority.ts",
+    "withdraw-pool-fees": "ts-node scripts/withdraw-pool-fees.ts",
     "start-keeper": "ts-node keeper-bot/src/index.ts",
     "test": "anchor test"
   },
@@ -33,6 +34,7 @@
     "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^22.10.6",
     "@types/node-cron": "^3.0.11",
     "ts-node": "^10.9.2",

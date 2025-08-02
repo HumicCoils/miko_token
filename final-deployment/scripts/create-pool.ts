@@ -24,12 +24,15 @@ import { BN } from '@coral-xyz/anchor';
 import { getConfigManager } from './config-manager';
 import { Raydium, TxVersion } from '@raydium-io/raydium-sdk-v2';
 import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Raydium CPMM Program ID
 const RAYDIUM_CPMM_PROGRAM_ID = new PublicKey('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C');
 
 // Bootstrap stage parameters from LAUNCH_LIQUIDITY_PARAMS.md
-const BOOTSTRAP_MIKO_AMOUNT = 45_000_000; // 45M MIKO (4.5% of supply)
+const BOOTSTRAP_MIKO_SEND = 47_370_000; // 47.37M MIKO to send (includes 5% tax)
+const BOOTSTRAP_MIKO_POOL = 45_000_000; // 45M MIKO arrives in pool after 5% tax
 const BOOTSTRAP_SOL_AMOUNT_TEST = 0.5; // 0.5 SOL for test
 const BOOTSTRAP_SOL_AMOUNT_CANARY = 0.05; // 0.05 SOL for canary  
 const BOOTSTRAP_SOL_AMOUNT_PROD = 0.5; // 0.5 SOL for production
@@ -161,16 +164,17 @@ async function createPool() {
   }
   
   // Calculate actual amounts with decimals
-  const mikoAmount = new BN(BOOTSTRAP_MIKO_AMOUNT).mul(new BN(10 ** mikoDecimals));
+  const mikoAmount = new BN(BOOTSTRAP_MIKO_SEND).mul(new BN(10 ** mikoDecimals));
   const solAmount = new BN(solAmountRaw * LAMPORTS_PER_SOL);
   
-  // Calculate initial price
-  const initialPricePerMiko = solAmountRaw / BOOTSTRAP_MIKO_AMOUNT;
+  // Calculate initial price (based on what arrives in pool after 5% fee)
+  const initialPricePerMiko = solAmountRaw / BOOTSTRAP_MIKO_POOL;
   const initialPricePerMillionMiko = initialPricePerMiko * 1_000_000;
-  const initialFdv = oraclePrice!.price * solAmountRaw * (1_000_000_000 / BOOTSTRAP_MIKO_AMOUNT);
+  const initialFdv = oraclePrice!.price * solAmountRaw * (1_000_000_000 / BOOTSTRAP_MIKO_POOL);
   
   console.log('\nPool Parameters (Bootstrap Stage):');
-  console.log(`- MIKO Amount: ${BOOTSTRAP_MIKO_AMOUNT.toLocaleString()} MIKO (4.5% of supply)`);
+  console.log(`- MIKO Send Amount: ${BOOTSTRAP_MIKO_SEND.toLocaleString()} MIKO (includes 5% tax)`);
+  console.log(`- MIKO in Pool: ${BOOTSTRAP_MIKO_POOL.toLocaleString()} MIKO (4.5% of supply)`);
   console.log(`- SOL Amount: ${solAmountRaw} SOL`);
   console.log(`- Initial Price: ${initialPricePerMillionMiko.toFixed(8)} SOL per 1M MIKO`);
   console.log(`- Initial Price: $${(initialPricePerMillionMiko * oraclePrice!.price).toFixed(4)} per 1M MIKO`);
@@ -197,10 +201,9 @@ async function createPool() {
     const mikoBalance = Number(mikoAccount.amount) / (10 ** mikoDecimals);
     console.log('MIKO Balance:', mikoBalance.toLocaleString(), 'MIKO');
     
-    // Account for 5% transfer fee
-    const requiredMikoWithFee = BOOTSTRAP_MIKO_AMOUNT * 1.05263; // 1 / 0.95 ≈ 1.05263
-    if (mikoBalance < requiredMikoWithFee) {
-      throw new Error(`Insufficient MIKO balance! Need ${requiredMikoWithFee.toLocaleString()} MIKO (including 5% fee)`);
+    // Check if we have enough MIKO to send (already includes 5% tax)
+    if (mikoBalance < BOOTSTRAP_MIKO_SEND) {
+      throw new Error(`Insufficient MIKO balance! Need ${BOOTSTRAP_MIKO_SEND.toLocaleString()} MIKO to send`);
     }
   } catch (error) {
     throw new Error('Deployer MIKO ATA not found. Run create-token.ts first!');
@@ -300,16 +303,19 @@ async function createPool() {
     configManager
   );
   
-  // Save pool info
+  // Save pool info with vault addresses
   const poolInfo = {
     poolId: poolId.toBase58(),
     mintA: tokenMint.toBase58(),
     mintB: solMint.toBase58(),
+    vaultA: extInfo.address.vaultA.toBase58(),
+    vaultB: extInfo.address.vaultB.toBase58(),
     feeRate: 0.0025, // 0.25%
     createdAt: new Date().toISOString(),
     signature: sig,
     bootstrapStage: {
-      mikoAmount: BOOTSTRAP_MIKO_AMOUNT,
+      mikoSent: BOOTSTRAP_MIKO_SEND,
+      mikoInPool: BOOTSTRAP_MIKO_POOL,
       solAmount: solAmountRaw,
       solPrice: oraclePrice!.price,
       initialPricePerMiko: initialPricePerMiko,
@@ -328,12 +334,13 @@ async function createPool() {
   });
   
   console.log('\n📊 Bootstrap Stage Summary:');
-  console.log(`- MIKO Added: ${BOOTSTRAP_MIKO_AMOUNT.toLocaleString()} (4.5% of supply)`);
+  console.log(`- MIKO Sent: ${BOOTSTRAP_MIKO_SEND.toLocaleString()} (includes 5% tax)`);
+  console.log(`- MIKO in Pool: ${BOOTSTRAP_MIKO_POOL.toLocaleString()} (4.5% of supply)`);
   console.log(`- SOL Added: ${solAmountRaw}`);
   console.log(`- Initial Price: ${initialPricePerMillionMiko.toFixed(8)} SOL per 1M MIKO`);
   console.log(`- Initial FDV: $${initialFdv.toLocaleString()}`);
-  console.log(`- Fee Rate: 0.25%`);
-  console.log(`- 5% Transfer Fee: Applied automatically`);
+  console.log(`- Pool Fee Rate: 0.25%`);
+  console.log(`- Transfer Fee: 5% applied automatically`);
   console.log('\n✅ Pool is now live for trading!');
   console.log('\n⏱️  Next liquidity stages:');
   console.log('- Stage A: +60s (225M MIKO + ' + 
@@ -370,8 +377,11 @@ async function setLaunchTime(
       { commitment: configManager.getCommitment() }
     );
     
-    const idl = await anchor.Program.fetchIdl(vaultProgramId, provider);
-    const program = new anchor.Program(idl!, provider);
+    // Load IDL from local file
+    const idlPath = path.join(__dirname, '..', 'idl', 'absolute_vault.json');
+    const idl = JSON.parse(fs.readFileSync(idlPath, 'utf-8'));
+    idl.address = vaultProgramId.toBase58();
+    const program = new anchor.Program(idl, provider);
     
     const tx = await program.methods
       .setLaunchTime()
@@ -409,8 +419,11 @@ async function updatePoolRegistry(
       { commitment: configManager.getCommitment() }
     );
     
-    const idl = await anchor.Program.fetchIdl(vaultProgramId, provider);
-    const program = new anchor.Program(idl!, provider);
+    // Load IDL from local file
+    const idlPath = path.join(__dirname, '..', 'idl', 'absolute_vault.json');
+    const idl = JSON.parse(fs.readFileSync(idlPath, 'utf-8'));
+    idl.address = vaultProgramId.toBase58();
+    const program = new anchor.Program(idl, provider);
     
     const poolRegistryPda = configManager.getPoolRegistryPda();
     
@@ -433,12 +446,23 @@ async function updatePoolRegistry(
 
 // Import Pyth client
 import { PriceServiceConnection } from '@pythnetwork/price-service-client';
+import { withdrawPoolFees } from './withdraw-pool-fees';
 
 // Run if called directly
 if (require.main === module) {
   createPool()
-    .then(() => {
-      console.log('\n✅ Success!');
+    .then(async () => {
+      console.log('\n=== Recovering Initial Pool Fees ===');
+      console.log('Withdrawing withheld fees from pool creation...\n');
+      
+      try {
+        await withdrawPoolFees();
+        console.log('✅ Initial fees recovered successfully!');
+      } catch (error) {
+        console.log('⚠️  Failed to recover initial fees:', error);
+      }
+      
+      console.log('\n✅ Pool creation complete!');
       process.exit(0);
     })
     .catch(err => {

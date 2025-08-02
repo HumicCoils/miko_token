@@ -90,7 +90,7 @@ export class Logger {
   }
   
   // Performance logging
-  startTimer(): () => void {
+  startTimer(): () => number {
     const start = Date.now();
     return () => {
       const duration = Date.now() - start;

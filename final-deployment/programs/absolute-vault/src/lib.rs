@@ -6,7 +6,8 @@ use spl_token_2022::{
     extension::{
         transfer_fee::instruction::{
             harvest_withheld_tokens_to_mint, 
-            withdraw_withheld_tokens_from_accounts
+            withdraw_withheld_tokens_from_accounts,
+            withdraw_withheld_tokens_from_mint
         },
         StateWithExtensions,
     },
@@ -168,13 +169,12 @@ pub mod absolute_vault {
         ];
         let signer_seeds = &[&seeds[..]];
         
-        let ix = withdraw_withheld_tokens_from_accounts(
+        let ix = withdraw_withheld_tokens_from_mint(
             &ctx.accounts.token_program.key(),
             &ctx.accounts.token_mint.key(),
             &ctx.accounts.vault_token_account.key(),
             &vault_key,
             &[],
-            &[&ctx.accounts.token_mint.key()],
         )?;
         
         invoke_signed(

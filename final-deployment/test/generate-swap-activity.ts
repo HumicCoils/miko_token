@@ -3,15 +3,19 @@ import {
   Keypair, 
   PublicKey, 
   LAMPORTS_PER_SOL,
-  VersionedTransaction
+  Transaction,
+  sendAndConfirmTransaction,
+  ComputeBudgetProgram
 } from '@solana/web3.js';
 import { 
   TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   getAccount
 } from '@solana/spl-token';
-import axios from 'axios';
+import { Raydium, TxVersion, CurveCalculator } from '@raydium-io/raydium-sdk-v2';
+import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -29,8 +33,9 @@ interface TestWallet {
 class SwapActivityGenerator {
   private connection: Connection;
   private testWallets: TestWallet[] = [];
-  private mikoMint: PublicKey;
-  private poolId: PublicKey;
+  private mikoMint!: PublicKey;
+  private poolId!: PublicKey;
+  private raydium!: Raydium;
   
   constructor() {
     this.connection = new Connection(FORK_RPC, 'confirmed');
@@ -38,14 +43,25 @@ class SwapActivityGenerator {
   
   async initialize() {
     // Load deployment info
-    const deploymentPath = path.join(__dirname, '..', 'deployment-addresses.json');
+    const deploymentPath = path.join(__dirname, '..', 'config', 'deployment-state.json');
     const deployment = JSON.parse(fs.readFileSync(deploymentPath, 'utf-8'));
     
-    this.mikoMint = new PublicKey(deployment.token.address);
-    this.poolId = new PublicKey(deployment.pool.address);
+    this.mikoMint = new PublicKey(deployment.token_mint);
+    this.poolId = new PublicKey(deployment.pool_id);
     
     console.log('MIKO Mint:', this.mikoMint.toBase58());
     console.log('Pool ID:', this.poolId.toBase58());
+    
+    // Initialize Raydium SDK
+    console.log('Initializing Raydium SDK...');
+    this.raydium = await Raydium.load({
+      connection: this.connection,
+      owner: Keypair.generate(), // Temporary keypair for SDK initialization
+      cluster: 'devnet',
+      disableFeatureCheck: true,
+      disableLoadToken: false,
+      blockhashCommitment: 'confirmed',
+    });
   }
   
   async createTestWallets() {
@@ -91,7 +107,7 @@ class SwapActivityGenerator {
     console.log('\n💰 Funding wallets with MIKO...');
     
     // Load deployer who has the initial MIKO supply
-    const deployerPath = path.join(__dirname, '..', 'keypairs', 'deployer.json');
+    const deployerPath = path.join(__dirname, '..', 'keypairs', 'deployer-keypair.json');
     const deployer = Keypair.fromSecretKey(
       new Uint8Array(JSON.parse(fs.readFileSync(deployerPath, 'utf-8')))
     );
@@ -102,7 +118,7 @@ class SwapActivityGenerator {
       
       try {
         // Use 1-2 SOL to buy MIKO
-        const solAmount = (1 + Math.random()) * LAMPORTS_PER_SOL;
+        const solAmount = Math.floor((1 + Math.random()) * LAMPORTS_PER_SOL);
         
         // Swap SOL for MIKO using Raydium
         await this.swapSolForMiko(wallet, solAmount);
@@ -173,89 +189,128 @@ class SwapActivityGenerator {
   }
   
   private async swapSolForMiko(wallet: TestWallet, solAmount: number) {
-    // Use actual Raydium or Jupiter router
-    const useJupiter = Math.random() > 0.5;
-    
-    if (useJupiter) {
-      await this.swapViaJupiter(
-        wallet,
-        new PublicKey('So11111111111111111111111111111111111112'),
-        this.mikoMint,
-        solAmount
-      );
-    } else {
-      await this.swapViaRaydium(wallet, false, solAmount);
-    }
+    await this.swapOnRaydium(
+      wallet,
+      new PublicKey('So11111111111111111111111111111111111111112'), // SOL
+      this.mikoMint,
+      solAmount
+    );
   }
   
   private async swapMikoForSol(wallet: TestWallet, mikoAmount: number) {
-    // Use actual Raydium or Jupiter router
-    const useJupiter = Math.random() > 0.5;
-    
-    if (useJupiter) {
-      await this.swapViaJupiter(
-        wallet,
-        this.mikoMint,
-        new PublicKey('So11111111111111111111111111111111111112'),
-        mikoAmount
-      );
-    } else {
-      await this.swapViaRaydium(wallet, true, mikoAmount);
-    }
+    await this.swapOnRaydium(
+      wallet,
+      this.mikoMint,
+      new PublicKey('So11111111111111111111111111111111111111112'), // SOL
+      mikoAmount
+    );
   }
   
-  private async swapViaJupiter(
+  private async swapOnRaydium(
     wallet: TestWallet,
     inputMint: PublicKey,
     outputMint: PublicKey,
     amount: number
   ) {
-    // Get quote from Jupiter API
-    const quoteResponse = await axios.get('https://quote-api.jup.ag/v6/quote', {
-      params: {
-        inputMint: inputMint.toBase58(),
-        outputMint: outputMint.toBase58(),
-        amount: amount.toString(),
-        slippageBps: 100
+    try {
+      // Create Raydium instance for this wallet
+      const walletRaydium = await Raydium.load({
+        connection: this.connection,
+        owner: wallet.keypair,
+        cluster: 'devnet',
+        disableFeatureCheck: true,
+        disableLoadToken: false,
+        blockhashCommitment: 'confirmed',
+      });
+      
+      // Get pool information from RPC
+      const data = await walletRaydium.cpmm.getPoolInfoFromRpc(this.poolId.toBase58());
+      const poolInfo = data.poolInfo;
+      const poolKeys = data.poolKeys;
+      const rpcData = data.rpcData;
+      
+      // Determine if we're swapping base token or quote token
+      const baseIn = inputMint.toBase58() === poolInfo.mintA.address;
+      
+      // Create BN for amount
+      const inputAmount = new BN(amount.toString());
+      
+      // Calculate swap output using CurveCalculator
+      const swapResult = CurveCalculator.swap(
+        inputAmount,
+        baseIn ? rpcData.baseReserve : rpcData.quoteReserve,
+        baseIn ? rpcData.quoteReserve : rpcData.baseReserve,
+        rpcData.configInfo!.tradeFeeRate
+      );
+      
+      // Check output token account
+      const outputTokenProgram = outputMint.equals(new PublicKey('So11111111111111111111111111111111111111112')) 
+        ? TOKEN_PROGRAM_ID 
+        : TOKEN_2022_PROGRAM_ID;
+      
+      const userOutputATA = getAssociatedTokenAddressSync(
+        outputMint,
+        wallet.publicKey,
+        false,
+        outputTokenProgram
+      );
+      
+      // Pre-create output ATA if needed
+      let createATANeeded = false;
+      try {
+        await getAccount(this.connection, userOutputATA, undefined, outputTokenProgram);
+      } catch {
+        createATANeeded = true;
       }
-    });
-    
-    const quote = quoteResponse.data;
-    
-    // Get swap transaction
-    const swapResponse = await axios.post('https://quote-api.jup.ag/v6/swap', {
-      quoteResponse: quote,
-      userPublicKey: wallet.publicKey.toBase58(),
-      wrapAndUnwrapSol: true
-    });
-    
-    const swapTransactionBuf = Buffer.from(swapResponse.data.swapTransaction, 'base64');
-    const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
-    
-    // Sign and send
-    transaction.sign([wallet.keypair]);
-    const signature = await this.connection.sendRawTransaction(transaction.serialize());
-    await this.connection.confirmTransaction(signature);
-  }
-  
-  private async swapViaRaydium(wallet: TestWallet, isMikoToSol: boolean, amount: number) {
-    // Direct swap on Raydium CPMM pool
-    // This would use the actual Raydium SDK or direct program calls
-    // For now, using Jupiter which will route through Raydium
-    if (isMikoToSol) {
-      await this.swapViaJupiter(
-        wallet,
-        this.mikoMint,
-        new PublicKey('So11111111111111111111111111111111111112'),
-        amount
-      );
-    } else {
-      await this.swapViaJupiter(
-        wallet,
-        new PublicKey('So11111111111111111111111111111111111112'),
-        this.mikoMint,
-        amount
-      );
+      
+      if (createATANeeded) {
+        const createATATx = new Transaction();
+        createATATx.add(
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 }),
+          createAssociatedTokenAccountInstruction(
+            wallet.publicKey,
+            userOutputATA,
+            wallet.publicKey,
+            outputMint,
+            outputTokenProgram
+          )
+        );
+        
+        const { blockhash } = await this.connection.getLatestBlockhash();
+        createATATx.recentBlockhash = blockhash;
+        createATATx.feePayer = wallet.publicKey;
+        
+        await sendAndConfirmTransaction(
+          this.connection,
+          createATATx,
+          [wallet.keypair],
+          { commitment: 'confirmed' }
+        );
+      }
+      
+      // Build and execute the swap transaction
+      const { execute } = await walletRaydium.cpmm.swap({
+        poolInfo,
+        poolKeys,
+        inputAmount,
+        swapResult,
+        slippage: 0.10, // 10% slippage (5% for MIKO transfer fee + buffer)
+        baseIn,
+        computeBudgetConfig: {
+          units: 400_000,
+          microLamports: 1_000,
+        },
+      });
+      
+      // Execute the transaction
+      const { txId } = await execute({ sendAndConfirm: true });
+      
+      console.log(`Swap successful: ${txId}`);
+      
+    } catch (error) {
+      console.error('Raydium swap error:', error);
+      throw error;
     }
   }
   

@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { Logger } from '../utils/logger';
 
-interface TokenHolder {
+export interface TokenHolder {
   owner: string;
   balance: number;
   percentage: number;
@@ -92,7 +92,7 @@ export class BirdeyeClient {
     try {
       await this.enforceRateLimit();
       
-      const response = await this.axios.get('/defi/v2/price', {
+      const response = await this.axios.get<{ data: TokenPrice }>('/defi/v2/price', {
         params: {
           address: tokenAddress
         }
@@ -103,7 +103,15 @@ export class BirdeyeClient {
         return 0;
       }
       
-      return response.data.data.value;
+      const priceData: TokenPrice = response.data.data;
+      this.logger.debug('Token price data', {
+        token: tokenAddress,
+        price: priceData.value,
+        updateTime: new Date(priceData.updateUnixTime * 1000).toISOString(),
+        slot: priceData.updateSlot
+      });
+      
+      return priceData.value;
       
     } catch (error: any) {
       this.logger.error('Failed to get token price', {
@@ -251,7 +259,7 @@ export class BirdeyeClient {
    */
   async testConnection(): Promise<boolean> {
     try {
-      const testToken = 'So11111111111111111111111111111111111112'; // SOL
+      const testToken = 'So11111111111111111111111111111111111111112'; // SOL
       const price = await this.getTokenPrice(testToken);
       
       if (price > 0) {

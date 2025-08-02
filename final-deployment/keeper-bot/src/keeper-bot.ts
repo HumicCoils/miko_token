@@ -2,21 +2,21 @@ import {
   Connection, 
   Keypair, 
   PublicKey,
-  Transaction,
   sendAndConfirmTransaction,
   ComputeBudgetProgram,
   LAMPORTS_PER_SOL
 } from '@solana/web3.js';
 import { 
   TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
   getAccount,
-  getMint,
   getAssociatedTokenAddressSync
 } from '@solana/spl-token';
 import * as anchor from '@coral-xyz/anchor';
 import { BN } from '@coral-xyz/anchor';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
 import { getConfigManager } from '../../scripts/config-manager';
 import { JupiterSwap } from './modules/jupiter-swap';
 import { Logger } from './utils/logger';
@@ -25,6 +25,13 @@ import { HolderDistributor } from './modules/holder-distributor';
 import { TwitterMonitor } from './modules/twitter-monitor';
 import { BirdeyeClient } from './api/birdeye-client';
 import { PythClient } from './api/pyth-client';
+
+// Test modules
+import { MockBirdeyeClient } from './test/mock-birdeye-client';
+import { RaydiumSwapService } from './test/raydium-swap-service';
+
+// Load environment variables
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 interface KeeperConfig {
   harvest_threshold_miko: number;
@@ -41,17 +48,17 @@ interface KeeperConfig {
 export class KeeperBot {
   private connection: Connection;
   private keeper: Keypair;
-  private vaultProgram: anchor.Program;
-  private smartDialProgram: anchor.Program;
+  private vaultProgram!: anchor.Program;
+  private smartDialProgram!: anchor.Program;
   private tokenMint: PublicKey;
   private vaultPda: PublicKey;
   private config: KeeperConfig;
   private logger: Logger;
-  private jupiterSwap: JupiterSwap;
+  private swapService: JupiterSwap | RaydiumSwapService;
   private poolDetector: PoolDetector;
   private holderDistributor: HolderDistributor;
   private twitterMonitor: TwitterMonitor;
-  private birdeyeClient: BirdeyeClient;
+  private birdeyeClient: BirdeyeClient | MockBirdeyeClient;
   private pythClient: PythClient;
   private isRunning: boolean = false;
   private configManager: any;
@@ -68,13 +75,26 @@ export class KeeperBot {
     const configPath = path.join(__dirname, '..', 'config', 'config.json');
     this.config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     
-    // Initialize modules
-    this.jupiterSwap = new JupiterSwap(this.connection, this.keeper, this.config);
+    // Check network and initialize appropriate modules
+    const network = process.env.NETWORK || 'localnet';
+    const isProduction = network === 'mainnet';
+    
+    this.logger.info('Initializing keeper bot', { network, isProduction });
+    
+    // Initialize swap service based on network
+    if (isProduction) {
+      this.swapService = new JupiterSwap(this.connection, this.keeper, this.config);
+      this.birdeyeClient = new BirdeyeClient(process.env.BIRDEYE_API_KEY || '', this.logger);
+    } else {
+      this.swapService = new RaydiumSwapService(this.connection, this.keeper, this.config);
+      this.birdeyeClient = new MockBirdeyeClient(this.connection, this.logger);
+    }
+    
+    // Initialize other modules
     this.poolDetector = new PoolDetector(this.connection, this.logger);
-    this.holderDistributor = new HolderDistributor(this.connection, this.keeper, this.config, this.logger);
+    this.holderDistributor = new HolderDistributor(this.connection, this.keeper, this.config, this.logger, this.birdeyeClient);
     this.twitterMonitor = new TwitterMonitor(this.config, this.logger);
-    this.birdeyeClient = new BirdeyeClient(this.config.birdeye.api_key, this.logger);
-    this.pythClient = new PythClient(this.config.pyth.endpoint, this.logger);
+    this.pythClient = new PythClient(process.env.PYTH_ENDPOINT || 'https://hermes.pyth.network', this.logger);
     
     this.logger.info('Keeper bot initialized', {
       keeper: this.keeper.publicKey.toBase58(),
@@ -98,11 +118,18 @@ export class KeeperBot {
       { commitment: this.configManager.getCommitment() }
     );
     
-    const vaultIdl = await anchor.Program.fetchIdl(vaultProgramId, provider);
-    const smartDialIdl = await anchor.Program.fetchIdl(smartDialProgramId, provider);
+    // Load IDLs from local files
+    const vaultIdlPath = path.join(__dirname, '..', '..', 'idl', 'absolute_vault.json');
+    const smartDialIdlPath = path.join(__dirname, '..', '..', 'idl', 'smart_dial.json');
     
-    this.vaultProgram = new anchor.Program(vaultIdl!, vaultProgramId, provider);
-    this.smartDialProgram = new anchor.Program(smartDialIdl!, smartDialProgramId, provider);
+    const vaultIdl = JSON.parse(fs.readFileSync(vaultIdlPath, 'utf-8'));
+    const smartDialIdl = JSON.parse(fs.readFileSync(smartDialIdlPath, 'utf-8'));
+    
+    vaultIdl.address = vaultProgramId.toBase58();
+    smartDialIdl.address = smartDialProgramId.toBase58();
+    
+    this.vaultProgram = new anchor.Program(vaultIdl, provider);
+    this.smartDialProgram = new anchor.Program(smartDialIdl, provider);
     
     this.logger.info('Programs initialized');
   }
@@ -115,8 +142,14 @@ export class KeeperBot {
     
     await this.initializePrograms();
     
-    // Ensure keeper has enough SOL
-    await this.ensureKeeperSolBalance();
+    // Check keeper SOL balance - will be handled in distribution if needed
+    const keeperBalance = await this.connection.getBalance(this.keeper.publicKey);
+    this.logger.logMetric('keeper_sol_balance', keeperBalance / LAMPORTS_PER_SOL);
+    if (keeperBalance < 0.05 * LAMPORTS_PER_SOL) {
+      this.logger.warn('Keeper SOL balance low, will top-up during distribution', {
+        current: keeperBalance / LAMPORTS_PER_SOL
+      });
+    }
     
     // Start Twitter monitor
     await this.twitterMonitor.start();
@@ -153,8 +186,9 @@ export class KeeperBot {
     const timer = this.logger.startTimer();
     this.logger.info('Starting keeper cycle');
     
-    // Ensure SOL balance before operations
-    await this.ensureKeeperSolBalance();
+    // Check if keeper needs SOL - will be handled during distribution
+    const keeperBalance = await this.connection.getBalance(this.keeper.publicKey);
+    const keeperNeedsSol = keeperBalance < 0.05 * LAMPORTS_PER_SOL;
     
     // 1. Check accumulated fees
     const totalFees = await this.checkAccumulatedFees();
@@ -191,37 +225,317 @@ export class KeeperBot {
     const rewardToken = await this.getCurrentRewardToken();
     this.logger.info('Current reward token', { rewardToken: rewardToken.toBase58() });
     
-    // 7. Calculate distribution amounts
-    const ownerAmount = Math.floor(harvestResult.amount * this.config.distribution.owner_percent / 100);
-    const holdersAmount = harvestResult.amount - ownerAmount;
+    // 7. Handle tax distribution with keeper SOL top-up scenarios
+    const solMint = new PublicKey('So11111111111111111111111111111111111111112');
+    const isRewardSol = rewardToken.equals(solMint);
     
-    // 8. Distribute owner's share
-    await this.distributeOwnerShare(ownerAmount, harvestResult.amount);
+    // Calculate base distribution amounts (20% owner, 80% holders)
+    let ownerAmount = Math.floor(harvestResult.amount * this.config.distribution.owner_percent / 100);
+    let holdersAmount = harvestResult.amount - ownerAmount;
     
-    // 9. Swap holders' share for reward token
-    let rewardAmount = 0;
-    if (!rewardToken.equals(this.tokenMint)) {
-      const swapResult = await this.jupiterSwap.swapMikoForToken(
+    // Handle keeper SOL top-up if needed
+    if (keeperNeedsSol) {
+      const targetBalance = 0.10 * LAMPORTS_PER_SOL; // Target 0.10 SOL
+      const neededSol = Math.max(0, targetBalance - keeperBalance);
+      
+      this.logger.info('Keeper needs SOL top-up', {
+        current: keeperBalance / LAMPORTS_PER_SOL,
+        target: targetBalance / LAMPORTS_PER_SOL,
+        needed: neededSol / LAMPORTS_PER_SOL
+      });
+      
+      // Tax flow implementation - need to handle swaps first
+      // Note: We'll handle keeper top-up after swapping to appropriate token
+    }
+    
+    // 8. Tax flow implementation with proper swaps
+    if (isRewardSol) {
+      // Scenario 1: Reward token is SOL - swap ALL MIKO to SOL first
+      this.logger.info('Reward token is SOL, swapping all harvested MIKO to SOL', {
+        mikoAmount: harvestResult.amount / 1e9
+      });
+      
+      // First ensure keeper has MIKO token account
+      const keeperMikoAccount = getAssociatedTokenAddressSync(
+        this.tokenMint,
+        this.keeper.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID
+      );
+      
+      // Check if account exists, create if not
+      const keeperMikoInfo = await this.connection.getAccountInfo(keeperMikoAccount);
+      if (!keeperMikoInfo) {
+        const { createAssociatedTokenAccountInstruction } = await import('@solana/spl-token');
+        const createIx = createAssociatedTokenAccountInstruction(
+          this.keeper.publicKey,
+          keeperMikoAccount,
+          this.keeper.publicKey,
+          this.tokenMint,
+          TOKEN_2022_PROGRAM_ID
+        );
+        const createTx = new anchor.web3.Transaction().add(createIx);
+        await sendAndConfirmTransaction(
+          this.connection,
+          createTx,
+          [this.keeper],
+          { commitment: 'confirmed' }
+        );
+      }
+      
+      // Transfer owner's 20% MIKO to keeper first
+      const transferTx = await this.vaultProgram.methods
+        .distributeRewards(
+          new BN(Math.floor(ownerAmount)),     // 20% to owner (keeper for now)
+          new BN(Math.floor(harvestResult.amount))  // Total amount
+        )
+        .accounts({
+          vault: this.vaultPda,
+          keeperAuthority: this.keeper.publicKey,
+          tokenMint: this.tokenMint,
+          vaultTokenAccount: getAssociatedTokenAddressSync(
+            this.tokenMint,
+            this.vaultPda,
+            true,
+            TOKEN_2022_PROGRAM_ID
+          ),
+          ownerTokenAccount: keeperMikoAccount, // Send to keeper for swapping
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      
+      this.logger.info('Transferred owner portion MIKO to keeper', {
+        signature: transferTx,
+        amount: ownerAmount / 1e9
+      });
+      
+      // Swap owner's 20% MIKO to SOL
+      const ownerSwapResult = await this.swapService.swapTokens(
+        this.tokenMint,
+        solMint,
+        ownerAmount,
+        this.keeper.publicKey
+      );
+      
+      if (!swapResult.success) {
+        this.logger.error('Failed to swap MIKO to SOL', swapResult);
+        return;
+      }
+      
+      const totalSol = swapResult.outputAmount;
+      this.logger.info('Swapped MIKO to SOL', {
+        mikoIn: harvestResult.amount / 1e9,
+        solOut: totalSol / LAMPORTS_PER_SOL
+      });
+      
+      // Now distribute the SOL according to rules
+      let keeperSolAmount = 0;
+      let ownerSolAmount = Math.floor(totalSol * this.config.distribution.owner_percent / 100);
+      let holdersSolAmount = totalSol - ownerSolAmount;
+      
+      if (keeperNeedsSol) {
+        // Use up to owner's 20% for keeper top-up
+        const neededSol = Math.max(0, 0.10 * LAMPORTS_PER_SOL - keeperBalance);
+        keeperSolAmount = Math.min(ownerSolAmount, neededSol);
+        ownerSolAmount -= keeperSolAmount;
+        
+        this.logger.info('Keeper SOL top-up allocated', {
+          needed: neededSol / LAMPORTS_PER_SOL,
+          allocated: keeperSolAmount / LAMPORTS_PER_SOL,
+          remainingOwner: ownerSolAmount / LAMPORTS_PER_SOL
+        });
+      }
+      
+      // Transfer SOL to owner (if any remaining after keeper top-up)
+      if (ownerSolAmount > 0) {
+        const vaultState = await (this.vaultProgram.account as any).vaultState.fetch(this.vaultPda);
+        const { SystemProgram } = anchor.web3;
+        
+        const ownerTransferIx = SystemProgram.transfer({
+          fromPubkey: this.keeper.publicKey,
+          toPubkey: vaultState.ownerWallet,
+          lamports: ownerSolAmount,
+        });
+        
+        const ownerTx = new anchor.web3.Transaction().add(ownerTransferIx);
+        const ownerSig = await sendAndConfirmTransaction(
+          this.connection,
+          ownerTx,
+          [this.keeper],
+          { commitment: 'confirmed' }
+        );
+        
+        this.logger.info('Owner SOL distributed', {
+          signature: ownerSig,
+          amount: ownerSolAmount / LAMPORTS_PER_SOL,
+          recipient: vaultState.ownerWallet.toBase58()
+        });
+      }
+      
+      // Distribute SOL to holders
+      const vaultState = await (this.vaultProgram.account as any).vaultState.fetch(this.vaultPda);
+      this.holderDistributor.setOwnerWallet(vaultState.ownerWallet);
+      
+      await this.holderDistributor.distributeToHolders(
+        0, // No MIKO amount
+        holdersSolAmount,
+        rewardToken,
+        this.keeper.publicKey // Distribute from keeper since they hold the SOL
+      );
+      
+    } else {
+      // Reward is NOT SOL
+      if (keeperNeedsSol) {
+        // Scenario 2: Swap part of owner's 20% to SOL for keeper
+        const targetBalance = 0.10 * LAMPORTS_PER_SOL;
+        const neededSol = Math.max(0, targetBalance - keeperBalance);
+        
+        // Calculate MIKO needed for SOL
+        const solPrice = await this.pythClient.getSolPrice();
+        const mikoPrice = await this.birdeyeClient.getTokenPrice(this.tokenMint.toBase58());
+        const mikoForSol = Math.ceil((neededSol / LAMPORTS_PER_SOL) * solPrice / mikoPrice * 1.1 * 1e9);
+        const keeperMikoAmount = Math.min(ownerAmount, mikoForSol);
+        
+        if (keeperMikoAmount > 0) {
+          // Transfer MIKO to keeper for swap
+          const keeperMikoAccount = getAssociatedTokenAddressSync(
+            this.tokenMint,
+            this.keeper.publicKey,
+            false,
+            TOKEN_2022_PROGRAM_ID
+          );
+          
+          const transferTx = await this.vaultProgram.methods
+            .distributeRewards(
+              new BN(Math.floor(keeperMikoAmount)),
+              new BN(Math.floor(harvestResult.amount))
+            )
+            .accounts({
+              vault: this.vaultPda,
+              keeperAuthority: this.keeper.publicKey,
+              tokenMint: this.tokenMint,
+              vaultTokenAccount: getAssociatedTokenAddressSync(
+                this.tokenMint,
+                this.vaultPda,
+                true,
+                TOKEN_2022_PROGRAM_ID
+              ),
+              ownerTokenAccount: keeperMikoAccount,
+              tokenProgram: TOKEN_2022_PROGRAM_ID,
+            })
+            .transaction();
+          
+          await sendAndConfirmTransaction(
+            this.connection,
+            transferTx,
+            [this.keeper],
+            { commitment: 'confirmed' }
+          );
+          
+          // Swap MIKO to SOL
+          const swapResult = await this.swapService.swapTokens(
+            this.tokenMint,
+            solMint,
+            keeperMikoAmount,
+            this.keeper.publicKey
+          );
+          
+          if (swapResult.success) {
+            this.logger.info('Keeper SOL top-up from owner portion', {
+              mikoUsed: keeperMikoAmount / 1e9,
+              solReceived: swapResult.outputAmount / LAMPORTS_PER_SOL
+            });
+          }
+          
+          // Adjust owner amount
+          ownerAmount = ownerAmount - keeperMikoAmount;
+        }
+      }
+      
+      // Swap remaining owner portion to reward token
+      if (ownerAmount > 0) {
+        const ownerSwapResult = await this.swapService.swapMikoForToken(
+          this.tokenMint,
+          rewardToken,
+          ownerAmount
+        );
+        
+        if (ownerSwapResult.success) {
+          // Transfer swapped reward tokens to owner
+          const vaultState = await (this.vaultProgram.account as any).vaultState.fetch(this.vaultPda);
+          const ownerRewardAccount = getAssociatedTokenAddressSync(
+            rewardToken,
+            vaultState.ownerWallet,
+            false,
+            rewardToken.equals(solMint) ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID
+          );
+          
+          const keeperRewardAccount = getAssociatedTokenAddressSync(
+            rewardToken,
+            this.keeper.publicKey,
+            false,
+            rewardToken.equals(solMint) ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID
+          );
+          
+          // Create transfer instruction
+          const { createTransferInstruction } = await import('@solana/spl-token');
+          const transferIx = createTransferInstruction(
+            keeperRewardAccount,
+            ownerRewardAccount,
+            this.keeper.publicKey,
+            ownerSwapResult.outputAmount,
+            [],
+            rewardToken.equals(solMint) ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID
+          );
+          
+          const transferTx = new anchor.web3.Transaction().add(transferIx);
+          
+          // Add priority fee
+          const priorityFee = this.configManager.getPriorityFee();
+          transferTx.add(
+            ComputeBudgetProgram.setComputeUnitPrice({
+              microLamports: priorityFee.microLamports,
+            })
+          );
+          
+          const transferSig = await sendAndConfirmTransaction(
+            this.connection,
+            transferTx,
+            [this.keeper],
+            { commitment: 'confirmed' }
+          );
+          
+          this.logger.info('Owner reward tokens transferred', {
+            signature: transferSig,
+            amount: ownerSwapResult.outputAmount,
+            recipient: vaultState.ownerWallet.toBase58()
+          });
+        }
+      }
+      
+      // Swap holders' share to reward token
+      const holdersSwapResult = await this.swapService.swapMikoForToken(
         this.tokenMint,
         rewardToken,
         holdersAmount
       );
       
-      if (!swapResult.success) {
-        this.logger.error('Swap failed', swapResult);
+      if (!holdersSwapResult.success) {
+        this.logger.error('Failed to swap holders share', holdersSwapResult);
         return;
       }
       
-      rewardAmount = swapResult.outputAmount;
+      // Distribute to holders
+      const vaultState = await (this.vaultProgram.account as any).vaultState.fetch(this.vaultPda);
+      this.holderDistributor.setOwnerWallet(vaultState.ownerWallet);
+      
+      await this.holderDistributor.distributeToHolders(
+        holdersAmount,
+        holdersSwapResult.outputAmount,
+        rewardToken,
+        this.vaultPda
+      );
     }
-    
-    // 10. Distribute to holders
-    await this.holderDistributor.distributeToHolders(
-      holdersAmount,
-      rewardAmount,
-      rewardToken,
-      this.vaultPda
-    );
     
     const duration = timer();
     this.logger.info('Keeper cycle completed', {
@@ -238,24 +552,124 @@ export class KeeperBot {
   }
   
   /**
-   * Check accumulated fees across all accounts
+   * Check accumulated fees across all accounts and mint
    */
   async checkAccumulatedFees(): Promise<number> {
-    const vaultState = await this.vaultProgram.account.vaultState.fetch(this.vaultPda);
+    // First check mint's withheld amount
+    let mintWithheld = 0;
+    try {
+      const { getMint } = await import('@solana/spl-token');
+      const mintInfo = await getMint(
+        this.connection,
+        this.tokenMint,
+        'confirmed',
+        TOKEN_2022_PROGRAM_ID
+      );
+      
+      // Check if mint has transfer fee extension
+      if (mintInfo.tlvData && mintInfo.tlvData.length > 0) {
+        const extensions = mintInfo.tlvData;
+        let offset = 0;
+        
+        while (offset < extensions.length - 2) {
+          const extensionType = extensions.readUInt16LE(offset);
+          const extensionLength = extensions.readUInt16LE(offset + 2);
+          
+          // TransferFeeConfig extension type = 1
+          if (extensionType === 1) {
+            // Skip to withheldAmount field in TransferFeeConfig
+            // Structure: transferFeeBasisPoints (2), maximumFee (8), transferFeeConfigAuthority (33), withdrawWithheldAuthority (33), withheldAmount (8)
+            const withheldOffset = offset + 4 + 2 + 8 + 33 + 33;
+            if (withheldOffset + 8 <= offset + 4 + extensionLength) {
+              mintWithheld = Number(extensions.readBigUInt64LE(withheldOffset));
+              if (mintWithheld > 0) {
+                this.logger.info('Found withheld fees in mint', {
+                  amount: mintWithheld / 1e9
+                });
+              }
+            }
+            break;
+          }
+          
+          offset += 4 + extensionLength;
+        }
+      }
+    } catch (error) {
+      this.logger.error('Failed to check mint withheld amount', error);
+    }
     
-    // Get mint withheld amount
-    const mintInfo = await getMint(
-      this.connection,
-      this.tokenMint,
-      'confirmed',
-      TOKEN_2022_PROGRAM_ID
+    // Get all token accounts for the mint
+    const accounts = await this.connection.getProgramAccounts(
+      TOKEN_2022_PROGRAM_ID,
+      {
+        filters: [
+          // Remove dataSize filter to catch accounts with extensions
+          { memcmp: { offset: 0, bytes: this.tokenMint.toBase58() } }
+        ]
+      }
     );
     
-    // Calculate total available
-    const vaultBalance = await this.getVaultBalance();
-    const pendingWithheld = vaultState.pendingWithheld?.toNumber() || 0;
+    this.logger.info('Checking accumulated fees across all accounts', {
+      totalAccounts: accounts.length,
+      mintWithheld: mintWithheld / 1e9
+    });
     
-    return vaultBalance + pendingWithheld;
+    let totalWithheld = mintWithheld;
+    let accountsWithFees = 0;
+    
+    // Check each account for withheld fees
+    for (const account of accounts) {
+      try {
+        const tokenAccount = await getAccount(
+          this.connection,
+          account.pubkey,
+          'confirmed',
+          TOKEN_2022_PROGRAM_ID
+        );
+        
+        // Check if account has transfer fee extension data
+        const extensions = tokenAccount.tlvData;
+        if (!extensions || extensions.length === 0) {
+          continue;
+        }
+        
+        // Parse extensions to find withheld amount
+        let offset = 0;
+        while (offset < extensions.length - 2) {
+          const extensionType = extensions.readUInt16LE(offset);
+          const extensionLength = extensions.readUInt16LE(offset + 2);
+          
+          // TransferFeeAmount extension type = 2
+          if (extensionType === 2) {
+            // withheldAmount is the first field (u64)
+            const withheldAmount = Number(extensions.readBigUInt64LE(offset + 4));
+            if (withheldAmount > 0) {
+              totalWithheld += withheldAmount;
+              accountsWithFees++;
+              this.logger.debug('Found withheld fees', {
+                account: account.pubkey.toBase58(),
+                withheld: withheldAmount / 1e9,
+                owner: tokenAccount.owner.toBase58()
+              });
+            }
+            break;
+          }
+          
+          offset += 4 + extensionLength;
+        }
+      } catch (error) {
+        // Skip accounts we can't read
+        continue;
+      }
+    }
+    
+    this.logger.info('Total accumulated fees found', {
+      totalWithheld: totalWithheld / 1e9,
+      accountsWithFees,
+      accountsScanned: accounts.length
+    });
+    
+    return totalWithheld;
   }
   
   /**
@@ -316,15 +730,17 @@ export class KeeperBot {
       const accounts = await this.getAccountsWithWithheldFees();
       
       if (accounts.length === 0) {
-        this.logger.warn('No accounts with withheld fees found');
-        return { success: false, amount: 0 };
+        this.logger.info('No accounts with withheld fees found, will check mint directly');
       }
       
-      // Harvest in batches
-      let totalHarvested = 0;
-      const batchSize = 20;
+      // Get initial vault balance to track harvested amount
+      const initialVaultBalance = await this.getVaultBalance();
       
-      for (let i = 0; i < accounts.length; i += batchSize) {
+      // Harvest from accounts if any have withheld fees
+      if (accounts.length > 0) {
+        const batchSize = 10;
+        
+        for (let i = 0; i < accounts.length; i += batchSize) {
         const batch = accounts.slice(i, i + batchSize);
         
         // Harvest fees instruction
@@ -367,9 +783,10 @@ export class KeeperBot {
           signature: harvestSig,
           accounts: batch.length 
         });
+        }
       }
       
-      // Withdraw from mint
+      // Always withdraw from mint to vault (mint may have accumulated fees)
       const vaultTokenAccount = getAssociatedTokenAddressSync(
         this.tokenMint,
         this.vaultPda,
@@ -395,14 +812,17 @@ export class KeeperBot {
         { commitment: 'confirmed' }
       );
       
-      // Get harvested amount
-      const harvestedAmount = await this.getVaultBalance();
+      // Get final vault balance and calculate harvested amount
+      const finalVaultBalance = await this.getVaultBalance();
+      const harvestedAmount = finalVaultBalance - initialVaultBalance;
       
       const duration = timer();
       this.logger.info('Fees harvested', { 
         signature: withdrawSig,
         amount: harvestedAmount / 1e9,
-        duration: `${duration}ms`
+        duration: `${duration}ms`,
+        initialBalance: initialVaultBalance / 1e9,
+        finalBalance: finalVaultBalance / 1e9
       });
       
       this.logger.logMetric('harvest_duration_ms', duration);
@@ -467,7 +887,7 @@ export class KeeperBot {
    */
   async getCurrentRewardToken(): Promise<PublicKey> {
     const smartDialPda = this.configManager.getSmartDialPda();
-    const smartDialState = await this.smartDialProgram.account.dialState.fetch(smartDialPda);
+    const smartDialState = await (this.smartDialProgram.account as any).dialState.fetch(smartDialPda);
     return smartDialState.currentRewardToken;
   }
   
@@ -476,7 +896,7 @@ export class KeeperBot {
    */
   async distributeOwnerShare(ownerAmount: number, totalAmount: number) {
     try {
-      const vaultState = await this.vaultProgram.account.vaultState.fetch(this.vaultPda);
+      const vaultState = await (this.vaultProgram.account as any).vaultState.fetch(this.vaultPda);
       const ownerTokenAccount = getAssociatedTokenAddressSync(
         this.tokenMint,
         vaultState.ownerWallet,
@@ -560,14 +980,20 @@ export class KeeperBot {
       TOKEN_2022_PROGRAM_ID,
       {
         filters: [
-          { dataSize: 165 }, // Token account size
+          // Remove dataSize filter to catch accounts with extensions
           { memcmp: { offset: 0, bytes: this.tokenMint.toBase58() } }
         ]
       }
     );
     
+    this.logger.info('Scanning for accounts with withheld fees', {
+      totalAccounts: accounts.length
+    });
+    
     // Filter accounts with withheld fees
     const accountsWithFees: PublicKey[] = [];
+    let totalWithheldFound = 0;
+    
     for (const account of accounts) {
       try {
         // Parse token account data
@@ -595,17 +1021,19 @@ export class KeeperBot {
           const extensionLength = extensions.readUInt16LE(offset);
           offset += 2;
           
-          // Check if this is TransferFeeAmount extension (type = 1)
-          if (extensionType === 1) {
+          // Check if this is TransferFeeAmount extension (type = 2)
+          if (extensionType === 2) {
             // TransferFeeAmount structure:
             // withheld_amount: u64 (8 bytes)
             const withheldAmount = extensions.readBigUInt64LE(offset);
             
             if (withheldAmount > 0) {
               accountsWithFees.push(account.pubkey);
+              totalWithheldFound += Number(withheldAmount);
               this.logger.debug('Found account with withheld fees', {
                 account: account.pubkey.toBase58(),
-                withheldAmount: withheldAmount.toString()
+                withheldAmount: Number(withheldAmount) / 1e9,
+                owner: tokenAccount.owner.toBase58()
               });
             }
             break;
@@ -624,147 +1052,17 @@ export class KeeperBot {
     }
     
     this.logger.info('Found accounts with withheld fees', {
-      total: accounts.length,
-      withFees: accountsWithFees.length
+      totalAccounts: accounts.length,
+      accountsWithFees: accountsWithFees.length,
+      totalWithheld: totalWithheldFound / 1e9
     });
     
     return accountsWithFees;
   }
   
-  /**
-   * Check keeper SOL balance and top-up if needed
-   */
-  private async checkKeeperBalance() {
-    const balance = await this.connection.getBalance(this.keeper.publicKey);
-    const minBalance = 0.5 * LAMPORTS_PER_SOL; // 0.5 SOL minimum
-    
-    if (balance < minBalance) {
-      this.logger.warn('Keeper SOL balance low', {
-        current: balance / LAMPORTS_PER_SOL,
-        minimum: minBalance / LAMPORTS_PER_SOL
-      });
-    }
-    
-    this.logger.logMetric('keeper_sol_balance', balance / LAMPORTS_PER_SOL);
-    
-    return { balance, needsTopUp: balance < minBalance };
-  }
-  
-  /**
-   * Ensure keeper has enough SOL for operations
-   */
-  private async ensureKeeperSolBalance() {
-    const { balance, needsTopUp } = await this.checkKeeperBalance();
-    
-    if (!needsTopUp) {
-      return;
-    }
-    
-    this.logger.info('Keeper SOL balance low, initiating top-up');
-    
-    // Calculate how much SOL we need
-    const targetBalance = 1 * LAMPORTS_PER_SOL; // Target 1 SOL
-    const neededSol = targetBalance - balance;
-    
-    try {
-      // Get current SOL price
-      const solPrice = await this.pythClient.getSolPrice();
-      
-      // Calculate MIKO needed (add 10% buffer for slippage)
-      const mikoPrice = await this.birdeyeClient.getTokenPrice(this.tokenMint.toBase58());
-      const mikoNeeded = Math.ceil((neededSol / LAMPORTS_PER_SOL) * solPrice / mikoPrice * 1.1 * 1e9);
-      
-      this.logger.info('Calculating SOL top-up', {
-        currentBalance: balance / LAMPORTS_PER_SOL,
-        targetBalance: targetBalance / LAMPORTS_PER_SOL,
-        neededSol: neededSol / LAMPORTS_PER_SOL,
-        solPrice,
-        mikoPrice,
-        mikoNeeded: mikoNeeded / 1e9
-      });
-      
-      // Check if vault has enough MIKO
-      const vaultBalance = await this.getVaultBalance();
-      if (vaultBalance < mikoNeeded) {
-        this.logger.error('Insufficient MIKO in vault for SOL top-up', {
-          vaultBalance: vaultBalance / 1e9,
-          needed: mikoNeeded / 1e9
-        });
-        return;
-      }
-      
-      // Use emergency withdrawal to get MIKO
-      const deployer = this.configManager.loadKeypair('deployer');
-      const keeperMikoAccount = getAssociatedTokenAddressSync(
-        this.tokenMint,
-        this.keeper.publicKey,
-        false,
-        TOKEN_2022_PROGRAM_ID
-      );
-      
-      const withdrawTx = await this.vaultProgram.methods
-        .emergencyWithdrawVault(new BN(mikoNeeded))
-        .accounts({
-          vault: this.vaultPda,
-          authority: deployer.publicKey,
-          vaultTokenAccount: getAssociatedTokenAddressSync(
-            this.tokenMint,
-            this.vaultPda,
-            true,
-            TOKEN_2022_PROGRAM_ID
-          ),
-          destinationTokenAccount: keeperMikoAccount,
-          tokenMint: this.tokenMint,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-        })
-        .transaction();
-      
-      const withdrawSig = await sendAndConfirmTransaction(
-        this.connection,
-        withdrawTx,
-        [deployer],
-        { commitment: 'confirmed' }
-      );
-      
-      this.logger.info('Emergency withdrawal for SOL top-up', {
-        signature: withdrawSig,
-        amount: mikoNeeded / 1e9
-      });
-      
-      // Swap MIKO for SOL
-      const solMint = new PublicKey('So11111111111111111111111111111111111112');
-      const swapResult = await this.jupiterSwap.swapTokens(
-        this.tokenMint,
-        solMint,
-        mikoNeeded,
-        this.keeper.publicKey
-      );
-      
-      if (!swapResult.success) {
-        this.logger.error('Failed to swap MIKO for SOL', swapResult);
-        return;
-      }
-      
-      this.logger.info('SOL top-up completed', {
-        mikoSwapped: mikoNeeded / 1e9,
-        solReceived: swapResult.outputAmount / LAMPORTS_PER_SOL,
-        swapSignature: swapResult.signature
-      });
-      
-      // Log the event
-      this.logger.logEvent('keeper_sol_topup', {
-        previousBalance: balance / LAMPORTS_PER_SOL,
-        newBalance: (balance + swapResult.outputAmount) / LAMPORTS_PER_SOL,
-        mikoUsed: mikoNeeded / 1e9,
-        solReceived: swapResult.outputAmount / LAMPORTS_PER_SOL
-      });
-      
-    } catch (error) {
-      this.logger.error('Failed to top up keeper SOL balance', error);
-    }
-  }
   
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+  
 }

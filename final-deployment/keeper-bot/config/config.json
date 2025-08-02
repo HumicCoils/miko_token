@@ -18,7 +18,7 @@
     "check_minute": 0
   },
   "jupiter": {
-    "slippage_bps": 100,
+    "slippage_bps": 5000,
     "priority_fee_lamports": 5000
   },
   "pyth": {
@@ -26,7 +26,7 @@
     "endpoint": "https://hermes.pyth.network"
   },
   "birdeye": {
-    "api_key": "",
+    "api_key": "549f641fb24d48bfb88a64878a9619f6",
     "rate_limit_ms": 1000
   },
   "log": {

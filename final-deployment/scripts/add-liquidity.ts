@@ -24,12 +24,14 @@ import { BN } from '@coral-xyz/anchor';
 import { getConfigManager } from './config-manager';
 import { Raydium, TxVersion, Percent } from '@raydium-io/raydium-sdk-v2';
 import Decimal from 'decimal.js';
+import { withdrawPoolFees } from './withdraw-pool-fees';
 
 // Stage parameters from LAUNCH_LIQUIDITY_PARAMS.md
 interface LiquidityStage {
   name: string;
   offsetSeconds: number;
-  mikoAmount: number; // in millions
+  mikoSend: number; // in millions (includes 5% tax)
+  mikoPool: number; // in millions (arrives in pool)
   solAmountTest: number;
   solAmountCanary: number;
   solAmountProd: number;
@@ -40,7 +42,8 @@ const LIQUIDITY_STAGES: LiquidityStage[] = [
   {
     name: 'A',
     offsetSeconds: 60,
-    mikoAmount: 225, // 225M MIKO
+    mikoSend: 236.84, // 236.84M MIKO to send
+    mikoPool: 225, // 225M MIKO arrives in pool
     solAmountTest: 2.5,
     solAmountCanary: 0.25,
     solAmountProd: 2.5,
@@ -49,7 +52,8 @@ const LIQUIDITY_STAGES: LiquidityStage[] = [
   {
     name: 'B',
     offsetSeconds: 180,
-    mikoAmount: 270, // 270M MIKO
+    mikoSend: 284.21, // 284.21M MIKO to send
+    mikoPool: 270, // 270M MIKO arrives in pool
     solAmountTest: 3.0,
     solAmountCanary: 0.3,
     solAmountProd: 3.0,
@@ -58,7 +62,8 @@ const LIQUIDITY_STAGES: LiquidityStage[] = [
   {
     name: 'C',
     offsetSeconds: 300,
-    mikoAmount: 360, // 360M MIKO
+    mikoSend: 378.95, // 378.95M MIKO to send
+    mikoPool: 360, // 360M MIKO arrives in pool
     solAmountTest: 4.0,
     solAmountCanary: 0.4,
     solAmountProd: 4.0,
@@ -184,6 +189,15 @@ async function addLiquidity() {
         raydium
       );
       
+      // Withdraw accumulated fees from this stage
+      console.log(`\n💸 Recovering fees from Stage ${stage.name}...`);
+      try {
+        await withdrawPoolFees();
+        console.log(`✅ Stage ${stage.name} fees recovered successfully!`);
+      } catch (error) {
+        console.log(`⚠️  Failed to recover Stage ${stage.name} fees:`, error);
+      }
+      
       // Update deployment state
       const updatedLiquidityState = {
         ...liquidityState,
@@ -258,7 +272,7 @@ async function executeStage(
   
   // Calculate amounts using Decimal for precision
   const mikoAmount = new BN(
-    new Decimal(stage.mikoAmount)
+    new Decimal(stage.mikoSend)
       .mul(1_000_000) // Convert millions to base
       .mul(10 ** mikoDecimals) // Apply decimals
       .toFixed(0)
@@ -270,9 +284,10 @@ async function executeStage(
   );
   
   console.log(`\nStage ${stage.name} Parameters:`);
-  console.log(`- MIKO Amount: ${stage.mikoAmount}M (${stage.percentOfSupply}% of supply)`);
+  console.log(`- MIKO Send: ${stage.mikoSend}M (includes 5% tax)`);
+  console.log(`- MIKO to Pool: ${stage.mikoPool}M (${stage.percentOfSupply}% of supply)`);
   console.log(`- SOL Amount: ${solAmountRaw} SOL`);
-  console.log(`- 5% Transfer Fee: Will be applied automatically`);
+  console.log(`- 5% Transfer Fee: Applied automatically`);
   
   // Get fresh pool info from RPC
   console.log('\nFetching current pool info...');
@@ -318,10 +333,10 @@ async function executeStage(
   );
   const mikoBalance = Number(mikoAccount.amount) / (10 ** mikoDecimals);
   
-  // Account for 5% transfer fee
-  const requiredMikoWithFee = stage.mikoAmount * 1_000_000 * 1.05263; // 1 / 0.95 ≈ 1.05263
-  if (mikoBalance < requiredMikoWithFee) {
-    throw new Error(`Insufficient MIKO balance! Need ${requiredMikoWithFee.toLocaleString()} MIKO (including 5% fee)`);
+  // Check if we have enough MIKO (stage.mikoSend already includes 5% tax)
+  const requiredMiko = stage.mikoSend * 1_000_000;
+  if (mikoBalance < requiredMiko) {
+    throw new Error(`Insufficient MIKO balance! Need ${requiredMiko.toLocaleString()} MIKO`);
   }
   
   const solBalance = await connection.getBalance(deployer.publicKey);
@@ -369,7 +384,8 @@ async function executeStage(
     signature: sig,
     slot: txDetails?.slot,
     timestamp: new Date().toISOString(),
-    mikoAmount: stage.mikoAmount * 1_000_000,
+    mikoSent: stage.mikoSend * 1_000_000,
+    mikoInPool: stage.mikoPool * 1_000_000,
     solAmount: solAmountRaw,
     executedAt: `+${stage.offsetSeconds}s`,
     priceImpact: priceImpact.toNumber(),

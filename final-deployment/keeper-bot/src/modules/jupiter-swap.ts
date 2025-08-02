@@ -4,8 +4,7 @@ import {
   PublicKey,
   Transaction,
   sendAndConfirmTransaction,
-  ComputeBudgetProgram,
-  LAMPORTS_PER_SOL
+  ComputeBudgetProgram
 } from '@solana/web3.js';
 import { 
   TOKEN_2022_PROGRAM_ID,
@@ -72,7 +71,12 @@ export class JupiterSwap {
     userPublicKey: PublicKey
   ): Promise<SwapResult> {
     try {
-      this.logger.info('Initiating swap', {
+      // Validate parameters
+      if (!this.validateSwapParams(inputMint, outputMint, amount)) {
+        return { success: false, outputAmount: 0, error: 'Invalid swap parameters' };
+      }
+      
+      this.logger.info('Initiating Jupiter swap', {
         inputMint: inputMint.toBase58(),
         outputMint: outputMint.toBase58(),
         amount: amount / 1e9,
@@ -112,7 +116,7 @@ export class JupiterSwap {
         outputMint,
         userPublicKey,
         false,
-        outputMint.equals(new PublicKey('So11111111111111111111111111111111111112')) 
+        outputMint.equals(new PublicKey('So11111111111111111111111111111111111111112')) 
           ? TOKEN_PROGRAM_ID 
           : TOKEN_2022_PROGRAM_ID
       );
@@ -124,7 +128,7 @@ export class JupiterSwap {
           outputTokenAccount,
           userPublicKey,
           outputMint,
-          outputMint.equals(new PublicKey('So11111111111111111111111111111111111112')) 
+          outputMint.equals(new PublicKey('So11111111111111111111111111111111111111112')) 
             ? TOKEN_PROGRAM_ID 
             : TOKEN_2022_PROGRAM_ID
         );

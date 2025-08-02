@@ -4,8 +4,7 @@ import {
   PublicKey,
   Transaction,
   sendAndConfirmTransaction,
-  ComputeBudgetProgram,
-  LAMPORTS_PER_SOL
+  ComputeBudgetProgram
 } from '@solana/web3.js';
 import { 
   TOKEN_2022_PROGRAM_ID,
@@ -17,9 +16,10 @@ import {
 } from '@solana/spl-token';
 import * as fs from 'fs';
 import * as path from 'path';
-import { BirdeyeClient } from '../api/birdeye-client';
+import { BirdeyeClient, TokenHolder } from '../api/birdeye-client';
 import { PythClient } from '../api/pyth-client';
 import { Logger } from '../utils/logger';
+import { getConfigManager } from '../../../scripts/config-manager';
 
 interface HolderInfo {
   owner: string;
@@ -47,18 +47,22 @@ export class HolderDistributor {
   private keeper: Keypair;
   private config: any;
   private logger: Logger;
-  private birdeyeClient: BirdeyeClient;
+  private birdeyeClient: BirdeyeClient | any; // Accept any client with compatible interface
   private pythClient: PythClient;
   private undistributedPath: string;
   private excludedPools: Set<string> = new Set();
+  private configManager: any;
+  private ownerWallet: PublicKey | null = null;
   
-  constructor(connection: Connection, keeper: Keypair, config: any, logger: Logger) {
+  constructor(connection: Connection, keeper: Keypair, config: any, logger: Logger, birdeyeClient?: any) {
     this.connection = connection;
     this.keeper = keeper;
     this.config = config;
     this.logger = logger;
-    this.birdeyeClient = new BirdeyeClient(config.birdeye.api_key, logger);
-    this.pythClient = new PythClient(config.pyth.endpoint, logger);
+    this.configManager = getConfigManager();
+    // Use provided client or create default
+    this.birdeyeClient = birdeyeClient || new BirdeyeClient(config.birdeye?.api_key || '', logger);
+    this.pythClient = new PythClient(config.pyth?.endpoint || 'https://hermes.pyth.network', logger);
     
     // Path for storing undistributed balance data
     this.undistributedPath = path.join(__dirname, '..', '..', 'data', 'undistributed.json');
@@ -75,6 +79,16 @@ export class HolderDistributor {
     }
     this.logger.info('Updated excluded pools for reward distribution', {
       count: pools.length
+    });
+  }
+  
+  /**
+   * Set owner wallet for exclusion from rewards
+   */
+  setOwnerWallet(ownerWallet: PublicKey) {
+    this.ownerWallet = ownerWallet;
+    this.logger.info('Set owner wallet for reward exclusion', {
+      owner: ownerWallet.toBase58()
     });
   }
   
@@ -107,8 +121,8 @@ export class HolderDistributor {
         totalToDistribute += undistributed.amount;
       }
       
-      // Get MIKO token mint
-      const mikoMint = new PublicKey(this.config.token_mint || process.env.MIKO_MINT || 'MIKO_MINT_ADDRESS');
+      // Get MIKO token mint from deployment state
+      const mikoMint = this.configManager.getTokenMint();
       
       // Get eligible holders
       const eligibleHolders = await this.getEligibleHolders(mikoMint);
@@ -314,7 +328,7 @@ export class HolderDistributor {
       
       // Get price for value calculation
       const solPrice = await this.pythClient.getSolPrice();
-      const mikoPrice = 0.001 * solPrice; // Rough estimate
+      const mikoPrice = 0.001 * solPrice; // Rough estimate if Birdeye fails
       
       const eligibleHolders: HolderInfo[] = [];
       const minValueUsd = this.config.minimum_holder_value_usd || 100;
@@ -381,11 +395,13 @@ export class HolderDistributor {
     const ownerPubkey = new PublicKey(owner);
     
     // System accounts to exclude
+    const vaultPda = this.configManager.getVaultPda();
+    
     const systemAccounts = [
       this.keeper.publicKey,
-      this.config.vault_pda ? new PublicKey(this.config.vault_pda) : null,
-      this.config.owner_wallet ? new PublicKey(this.config.owner_wallet) : null,
+      vaultPda,
       TOKEN_2022_PROGRAM_ID,
+      this.ownerWallet // Include owner wallet if set
     ].filter(Boolean) as PublicKey[];
     
     for (const account of systemAccounts) {
@@ -418,7 +434,7 @@ export class HolderDistributor {
     const tx = new Transaction();
     
     // Get reward token decimals
-    const isNativeSol = rewardToken.equals(new PublicKey('So11111111111111111111111111111111111112'));
+    const isNativeSol = rewardToken.equals(new PublicKey('So11111111111111111111111111111111111111112'));
     const mintInfo = await getMint(
       this.connection,
       rewardToken,
@@ -541,7 +557,7 @@ export class HolderDistributor {
    * Get count of eligible holders
    */
   async getEligibleHolderCount(): Promise<number> {
-    const mikoMint = new PublicKey(this.config.token_mint || process.env.MIKO_MINT || 'MIKO_MINT_ADDRESS');
+    const mikoMint = this.configManager.getTokenMint();
     const holders = await this.getEligibleHolders(mikoMint);
     return holders.length;
   }

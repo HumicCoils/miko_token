@@ -89,7 +89,7 @@ async function revokeMintAuthority() {
   });
   
   const confirmation = await new Promise<string>(resolve => {
-    readline.question('> ', answer => {
+    readline.question('> ', (answer: string) => {
       readline.close();
       resolve(answer);
     });
@@ -115,33 +115,17 @@ async function revokeMintAuthority() {
   console.log('Revoking mint authority...');
   
   try {
-    const tx = new Transaction();
-    
-    if (network === 'mainnet') {
-      const priorityFee = configManager.getPriorityFee();
-      tx.add(
-        ComputeBudgetProgram.setComputeUnitPrice({
-          microLamports: priorityFee.microLamports,
-        })
-      );
-    }
-    
-    tx.add(
-      setAuthority(
-        tokenMint,
-        deployer.publicKey,
-        AuthorityType.MintTokens,
-        null, // Set to null to revoke
-        [],
-        TOKEN_2022_PROGRAM_ID
-      )
-    );
-    
-    const sig = await sendAndConfirmTransaction(
+    // Use setAuthority helper which sends the transaction directly
+    const sig = await setAuthority(
       connection,
-      tx,
-      [deployer],
-      { commitment: configManager.getCommitment() }
+      deployer,
+      tokenMint,
+      deployer.publicKey,
+      AuthorityType.MintTokens,
+      null, // Set to null to revoke
+      [],
+      { commitment: configManager.getCommitment() },
+      TOKEN_2022_PROGRAM_ID
     );
     
     console.log('\n✅ MINT AUTHORITY REVOKED!');
